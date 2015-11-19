@@ -82,6 +82,9 @@ import socket
 import time
 import logging
 from   PyQt4 import QtGui
+from numpy import (array, dot)
+from numpy.linalg import norm
+
 docopt = smuggle(
     moduleName = "docopt",
     URL = "https://rawgit.com/docopt/docopt/master/docopt.py"
@@ -105,6 +108,7 @@ class interface(QtGui.QWidget):
         # engage stylus proximity control
         self.stylus_proximity_control_switch(status = "on")
         # engage acceleration control
+        self.orientation = "normal"
         #self.acceleration_control_switch(status = "on")
         # engage display position control
         self.displayPositionStatus = "laptop"
@@ -544,25 +548,31 @@ class interface(QtGui.QWidget):
     def acceleration_control(self):
         while True:
             # Get the mean of recent acceleration vectors.
-            numberOfMeasurements = 3
+            numberOfMeasurements = 6
             measurements = []
             for measurement in range(0, numberOfMeasurements):
+                time.sleep(0.25)
                 measurements.append(AccelerationVector())
             stableAcceleration = mean_list(lists = measurements)
             log.info("stable acceleration vector: {vector}".format(
                 vector = stableAcceleration
             ))
-            tableOrientations = {
-                (True,  True):  "left",
-                (True,  False): "right",
-                (False, True):  "inverted",
-                (False, False): "normal"
+            # Using numpy to compare rotation vectors.
+            stable = array((stableAcceleration[0], stableAcceleration[1], stableAcceleration[2]))
+            normal = array((0.0, -1, 0))
+            right = array((-1.0, 0, 0))
+            inverted = array((0.0, 1, 0))
+            left = array((1.0, 0, 0))
+            d = {
+                "normal": dot(stable, normal) / norm(stable) / norm(normal),
+                "inverted": dot(stable, inverted) / norm(stable) / norm(inverted),
+                "left": dot(stable, left) / norm(stable) / norm(left),
+                "right": dot(stable, right) / norm(stable) / norm(right)
             }
-            orientation = tableOrientations[(
-                abs(stableAcceleration[0]) > abs(stableAcceleration[1]),
-                stableAcceleration[0] > 0
-            )]
-            self.engage_mode(mode = orientation)
+            orientation = max(d, key=d.get)
+            if self.orientation != orientation:
+                self.orientation = orientation
+                self.engage_mode(mode = orientation)
             time.sleep(0.15)
 
     def acceleration_control_switch(
@@ -652,10 +662,10 @@ class interface(QtGui.QWidget):
             mode = mode
         ))
         if mode == "tablet":
-            self.display_orientation(orientation     = "left")
-            self.touchscreen_orientation(orientation = "left")
-            self.touchpad_switch(status              = "off")
+            self.display_orientation(orientation     = "inverted")
+            self.touchscreen_orientation(orientation = "inverted")
             self.nipple_switch(status                = "off") 
+            self.touchpad_switch(status              = "off")
         elif mode == "laptop":
             self.display_orientation(orientation     = "normal")
             self.touchscreen_orientation(orientation = "normal")
