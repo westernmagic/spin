@@ -663,20 +663,26 @@ class interface(QtGui.QWidget):
         ))
         if mode == "tablet":
             self.display_orientation(orientation     = "inverted")
-            self.touchscreen_orientation(orientation = "inverted")
             self.nipple_switch(status                = "off") 
             self.touchpad_switch(status              = "off")
+            time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
+            self.touchscreen_orientation(orientation = "inverted")
+            self.touchscreen_switch(status           = "on")
+            self.acceleration_control_switch(status = "on")
         elif mode == "laptop":
             self.display_orientation(orientation     = "normal")
-            self.touchscreen_orientation(orientation = "normal")
-            self.touchscreen_switch(status           = "on")
             self.touchpad_orientation(orientation    = "normal")
             self.touchpad_switch(status              = "on")
             self.nipple_switch(status                = "on")
+            time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
+            self.touchscreen_orientation(orientation = "normal")
+            self.touchscreen_switch(status           = "on")
+            self.acceleration_control_switch(status = "off")
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation     = mode)
-            self.touchscreen_orientation(orientation = mode)
             self.touchpad_orientation(orientation    = mode)
+            time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
+            self.touchscreen_orientation(orientation = mode)
         else:
             log.error(
                 "unknown mode \"{mode}\" requested".format(
