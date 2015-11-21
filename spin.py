@@ -110,19 +110,20 @@ class interface(QtGui.QWidget):
         self.stylus_proximity_control_switch(status = "on")
         # engage acceleration control
         self.orientation = "normal"
-        #self.acceleration_control_switch(status = "on")
         # engage display position control
         self.displayPositionStatus = "laptop"
         # Start a queue for reading screen rotation from the accelerometer
+        self.accelerometerStatus = "off"
         self.accelQueue = Queue()
         self.accelTimer = QTimer()
         self.accelTimer.timeout.connect(self.accelRead)
         self.accelTimer.start(100)
+        self.acceleration_control_switch(status = "off")
         # Start a queue for reading display position
-        self.displayPosQueue = Queue()
-        self.displayPosTimer = QTimer()
-        self.displayPosTimer.timeout.connect(self.displayPosRead)
-        self.displayPosTimer.start(110)
+        self.acpi_queue = Queue()
+        self.acpi_timer = QTimer()
+        self.acpi_timer.timeout.connect(self.acpi_read)
+        self.acpi_timer.start(110)
         self.display_position_control_switch(status = "on")
         if not options["--nogui"]:
             # create buttons
@@ -605,10 +606,13 @@ class interface(QtGui.QWidget):
                 args = (self.accelQueue,)
             )
             self.processAccelerationControl.start()
+            self.accelerometerStatus = "on"
         elif status == "off":
             log.info("change acceleration control to off")
             # TODO! Check if process exists, before terminating it.
-            self.processAccelerationControl.terminate()
+            if hasattr(self, 'processAccelerationControl'):
+                self.processAccelerationControl.terminate()
+            self.accelerometerStatus = "off"
         else:
             log.error(
                 "unknown acceleration control status \"{status}\" "
@@ -618,7 +622,7 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-    def display_position_control(self, displayPosQueue):
+    def display_position_control(self, acpi_queue):
         socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         socketACPI.connect("/var/run/acpid.socket")
         #log.info("display position is {displayPositionStatus}".format(
@@ -635,11 +639,10 @@ class interface(QtGui.QWidget):
             eventACPIDisplayPositionChange = \
                 "ibm/hotkey LEN0068:00 00000080 000060c0\n"
             if eventACPI == eventACPIRotationLock:
-                log.info("rotation lock key pressed")
-                displayPosQueue.put("rotatelock")
+                acpi_queue.put("rotatelock")
             if eventACPI == eventACPIDisplayPositionChange:
                 log.info("display position change")
-                displayPosQueue.put("change")
+                acpi_queue.put("change")
                 #if self.displayPositionStatus == "laptop":
                 #    #self.engage_mode(mode = "tablet")
                 #    self.displayPositionStatus = "tablet"
@@ -660,13 +663,22 @@ class interface(QtGui.QWidget):
         socketACPI.close()
 
 
-    def displayPosRead(self):
-        if self.displayPosQueue.empty():
+    def acpi_read(self):
+        if self.acpi_queue.empty():
             return
-        mode = self.displayPosQueue.get()
-        self.displayPositionStatus = "tablet" if self.displayPositionStatus == "tablet" else "laptop"
-        print("DISPLAY POSITION CHANGED: {mode}".format(mode = mode))
-        self.engage_mode(self.displayPositionStatus)
+        mode = self.acpi_queue.get()
+        if mode == "rotation_lock":
+            self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
+            print("TODO! Toggle accelerometer")
+            print(self.accelerometerStatus)
+            self.accelerometerStatus = "off" if self.accelerometerStatus == "on" else "off"
+            print(self.accelerometerStatus)
+            self.acceleration_control_switch(status = self.accelerometerStatus)
+            print(self.accelerometerStatus)
+        else:
+            self.displayPositionStatus = "laptop" if self.displayPositionStatus == "tablet" else "laptop"
+            print("DISPLAY POSITION CHANGED: {mode}".format(mode = mode))
+            self.engage_mode(self.displayPositionStatus)
 
 
     def display_position_control_switch(
@@ -676,8 +688,8 @@ class interface(QtGui.QWidget):
         if status == "on":
             log.info("change display position control to on")
             self.processdisplay_position_control = Process(
-                target = self.display_position_control,
-                args = (self.displayPosQueue,)
+                target = acpi_listen,
+                args = (self.acpi_queue,)
             )
             self.processdisplay_position_control.start()
         elif status == "off":
@@ -706,7 +718,7 @@ class interface(QtGui.QWidget):
             time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
             self.touchscreen_orientation(orientation = "inverted")
             self.touchscreen_switch(status           = "on")
-            self.acceleration_control_switch(status = "on")
+            self.acceleration_control_switch(status  = "on")
         elif mode == "laptop":
             self.display_orientation(orientation     = "normal")
             self.touchpad_orientation(orientation    = "normal")
@@ -715,7 +727,7 @@ class interface(QtGui.QWidget):
             time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
             self.touchscreen_orientation(orientation = "normal")
             self.touchscreen_switch(status           = "on")
-            self.acceleration_control_switch(status = "off")
+            self.acceleration_control_switch(status  = "off")
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation     = mode)
             self.touchpad_orientation(orientation    = mode)
@@ -776,6 +788,26 @@ def mean_list(
     lists = None
     ):
     return([sum(element)/len(element) for element in zip(*lists)])
+
+def acpi_listen(acpi_queue):
+    socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    socketACPI.connect("/var/run/acpid.socket")
+    while True:
+        eventACPI = socketACPI.recv(4096)
+        # Ubuntu 13.10 compatibility:
+        #eventACPIDisplayPositionChange = \
+        #    "ibm/hotkey HKEY 00000080 000060c0\n"
+        # Ubuntu 14.04 compatibility:
+        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        eventACPIDisplayPositionChange = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
+        if eventACPI == eventACPIRotationLock:
+            log.info("rotation lock key pressed")
+            acpi_queue.put("rotation_lock")
+        if eventACPI == eventACPIDisplayPositionChange:
+            log.info("display position change")
+            acpi_queue.put("display_position_change")
+        time.sleep(0.1)
+    socketACPI.close()
 
 class AccelerationVector(list):
 
