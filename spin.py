@@ -610,10 +610,13 @@ class interface(QtGui.QWidget):
             #eventACPIDisplayPositionChange = \
             #    "ibm/hotkey HKEY 00000080 000060c0\n"
             # Ubuntu 14.04 compatibility:
+            eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
             eventACPIDisplayPositionChange = \
                 "ibm/hotkey LEN0068:00 00000080 000060c0\n"
+            if eventACPI == eventACPIRotationLock:
+                log.info("rotation lock key pressed")
             if eventACPI == eventACPIDisplayPositionChange:
-                log.info("display position change")
+                log.info("display position change") 
                 if self.displayPositionStatus == "laptop":
                     self.engage_mode(mode = "tablet")
                     self.displayPositionStatus = "tablet"
@@ -631,6 +634,7 @@ class interface(QtGui.QWidget):
                         )
                     )
             time.sleep(0.15)
+        socketACPI.close()
 
     def display_position_control_switch(
         self,
