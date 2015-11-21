@@ -113,12 +113,17 @@ class interface(QtGui.QWidget):
         #self.acceleration_control_switch(status = "on")
         # engage display position control
         self.displayPositionStatus = "laptop"
-        self.display_position_control_switch(status = "on")
         # Start a queue for reading screen rotation from the accelerometer
         self.accelQueue = Queue()
         self.accelTimer = QTimer()
         self.accelTimer.timeout.connect(self.accelRead)
-        self.accelTimer.start(500)
+        self.accelTimer.start(100)
+        # Start a queue for reading display position
+        self.displayPosQueue = Queue()
+        self.displayPosTimer = QTimer()
+        self.displayPosTimer.timeout.connect(self.displayPosRead)
+        self.displayPosTimer.start(110)
+        self.display_position_control_switch(status = "on")
         if not options["--nogui"]:
             # create buttons
             buttonsList = []
@@ -602,6 +607,7 @@ class interface(QtGui.QWidget):
             self.processAccelerationControl.start()
         elif status == "off":
             log.info("change acceleration control to off")
+            # TODO! Check if process exists, before terminating it.
             self.processAccelerationControl.terminate()
         else:
             log.error(
@@ -612,13 +618,13 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-    def display_position_control(self):
+    def display_position_control(self, displayPosQueue):
         socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         socketACPI.connect("/var/run/acpid.socket")
-        log.info("display position is {displayPositionStatus}".format(
-            displayPositionStatus = self.displayPositionStatus
-            )
-        )
+        #log.info("display position is {displayPositionStatus}".format(
+        #    displayPositionStatus = self.displayPositionStatus
+        #    )
+        #)
         while True:
             eventACPI = socketACPI.recv(4096)
             # Ubuntu 13.10 compatibility:
@@ -630,26 +636,38 @@ class interface(QtGui.QWidget):
                 "ibm/hotkey LEN0068:00 00000080 000060c0\n"
             if eventACPI == eventACPIRotationLock:
                 log.info("rotation lock key pressed")
+                displayPosQueue.put("rotatelock")
             if eventACPI == eventACPIDisplayPositionChange:
-                log.info("display position change") 
-                if self.displayPositionStatus == "laptop":
-                    self.engage_mode(mode = "tablet")
-                    self.displayPositionStatus = "tablet"
-                    log.info(
-                        "display position is {displayPositionStatus}".format(
-                            displayPositionStatus = self.displayPositionStatus
-                        )
-                    )
-                elif self.displayPositionStatus == "tablet":
-                    self.engage_mode(mode = "laptop")
-                    self.displayPositionStatus = "laptop"
-                    log.info(
-                        "display position is {displayPositionStatus}".format(
-                            displayPositionStatus = self.displayPositionStatus
-                        )
-                    )
+                log.info("display position change")
+                displayPosQueue.put("change")
+                #if self.displayPositionStatus == "laptop":
+                #    #self.engage_mode(mode = "tablet")
+                #    self.displayPositionStatus = "tablet"
+                #    log.info(
+                #        "display position is {displayPositionStatus}".format(
+                #            displayPositionStatus = self.displayPositionStatus
+                #        )
+                #    )
+                #elif self.displayPositionStatus == "tablet":
+                #    self.engage_mode(mode = "laptop")
+                #    self.displayPositionStatus = "laptop"
+                #    log.info(
+                #        "display position is {displayPositionStatus}".format(
+                #            displayPositionStatus = self.displayPositionStatus
+                #        )
+                #    )
             time.sleep(0.15)
         socketACPI.close()
+
+
+    def displayPosRead(self):
+        if self.displayPosQueue.empty():
+            return
+        mode = self.displayPosQueue.get()
+        self.displayPositionStatus = "tablet" if self.displayPositionStatus == "tablet" else "laptop"
+        print("DISPLAY POSITION CHANGED: {mode}".format(mode = mode))
+        self.engage_mode(self.displayPositionStatus)
+
 
     def display_position_control_switch(
         self,
@@ -658,7 +676,8 @@ class interface(QtGui.QWidget):
         if status == "on":
             log.info("change display position control to on")
             self.processdisplay_position_control = Process(
-                target = self.display_position_control
+                target = self.display_position_control,
+                args = (self.displayPosQueue,)
             )
             self.processdisplay_position_control.start()
         elif status == "off":
