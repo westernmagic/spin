@@ -77,11 +77,12 @@ import os
 import sys
 import glob
 import subprocess
-import multiprocessing
 import socket
 import time
 import logging
 from   PyQt4 import QtGui
+from   PyQt4.QtCore import QTimer
+from multiprocessing import Process, Queue
 from numpy import (array, dot)
 from numpy.linalg import norm
 
@@ -113,6 +114,11 @@ class interface(QtGui.QWidget):
         # engage display position control
         self.displayPositionStatus = "laptop"
         self.display_position_control_switch(status = "on")
+        # Start a queue for reading screen rotation from the accelerometer
+        self.accelQueue = Queue()
+        self.accelTimer = QTimer()
+        self.accelTimer.timeout.connect(self.accelRead)
+        self.accelTimer.start(500)
         if not options["--nogui"]:
             # create buttons
             buttonsList = []
@@ -529,7 +535,7 @@ class interface(QtGui.QWidget):
         ):
         if status == "on":
             log.info("change stylus proximity control to on")
-            self.processStylusProximityControl = multiprocessing.Process(
+            self.processStylusProximityControl = Process(
                 target = self.stylus_proximity_control
             )
             self.processStylusProximityControl.start()
@@ -545,7 +551,7 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-    def acceleration_control(self):
+    def acceleration_control(self, accelQueue):
         while True:
             # Get the mean of recent acceleration vectors.
             numberOfMeasurements = 6
@@ -572,8 +578,16 @@ class interface(QtGui.QWidget):
             orientation = max(d, key=d.get)
             if self.orientation != orientation:
                 self.orientation = orientation
-                self.engage_mode(mode = orientation)
+                #self.engage_mode(mode = orientation)
+                accelQueue.put(orientation)
             time.sleep(0.15)
+
+    def accelRead(self):
+        if self.accelQueue.empty():
+            return
+        orientation = self.accelQueue.get()
+        print("ORIENTATION CHANGED TO: {orientation}".format(orientation = orientation))
+        self.engage_mode(orientation)
 
     def acceleration_control_switch(
         self,
@@ -581,8 +595,9 @@ class interface(QtGui.QWidget):
         ):
         if status == "on":
             log.info("change acceleration control to on")
-            self.processAccelerationControl = multiprocessing.Process(
-                target = self.acceleration_control
+            self.processAccelerationControl = Process(
+                target = self.acceleration_control,
+                args = (self.accelQueue,)
             )
             self.processAccelerationControl.start()
         elif status == "off":
@@ -642,7 +657,7 @@ class interface(QtGui.QWidget):
         ):
         if status == "on":
             log.info("change display position control to on")
-            self.processdisplay_position_control = multiprocessing.Process(
+            self.processdisplay_position_control = Process(
                 target = self.display_position_control
             )
             self.processdisplay_position_control.start()
