@@ -2,6 +2,22 @@
 
 a small utility to assist in setting usage modes of laptop-tablet devices
 
+## about this fork
+
+This is a fork of wdbm/spin. I'm currently working in the yoga12-2nd-gen branch, to get everything working properly with my Thinkpad Yoga 12 2nd Gen machine under Ubuntu 15.10. So far I've done the following changes:
+
+- Improved the handling of the accelerometer using vector math, so it detects the correct orientation.
+- Moved all changes to the screen rotation to the mani process, and use messaging from the subprocesses to tell the main process what to do.
+- Added support for the rotation lock key on the side of the ThinkPad Yoga 12.
+- It now waits for the touchscreen to be ready, before attempting to rotate it.
+
+Known issues:
+
+- The display position detector triggers once in tablet mode, when the accelerometer detector is not running, but twice (in tent and tablet mode) when it's not. This confuses the script, so you sometimes wind up in laptopt mode, when you should be in tablet mode, and vice versa.
+- Sometimes the keyboard gets turned off, when it's in laptop mode. I think this is related to the above issue.
+
+Other than that, it's almost done.
+
 ## prerequisites
 
 ```Bash
