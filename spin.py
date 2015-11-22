@@ -359,6 +359,9 @@ class interface(QtGui.QWidget):
                 "inverted": "-1 0 1 0 -1 1 0 0 1",
                 "normal":   "1 0 0 0 1 0 0 0 1"
             }
+            # Waiting for the touchscreen to reconnect, after the screen rotates.
+            while not self.is_touchscreen_alive():
+                time.sleep(0.5)
             if coordinateTransformationMatrix.has_key(orientation):
                 log.info("change touchscreen to {orientation}".format(
                     orientation = orientation
@@ -391,6 +394,8 @@ class interface(QtGui.QWidget):
                 "on":  "enable",
                 "off": "disable"
             }
+            while not self.is_touchscreen_alive():
+                time.sleep(0.5)
             if xinputStatus.has_key(status):
                 log.info("change touchscreen to {status}".format(
                     status = status
@@ -557,43 +562,11 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-    def acceleration_listen(self, accelQueue):
-        while True:
-            # Get the mean of recent acceleration vectors.
-            numberOfMeasurements = 6
-            measurements = []
-            for measurement in range(0, numberOfMeasurements):
-                time.sleep(0.25)
-                measurements.append(AccelerationVector())
-            stableAcceleration = mean_list(lists = measurements)
-            log.info("stable acceleration vector: {vector}".format(
-                vector = stableAcceleration
-            ))
-            # Using numpy to compare rotation vectors.
-            stable = array((stableAcceleration[0], stableAcceleration[1], stableAcceleration[2]))
-            normal = array((0.0, -1, 0))
-            right = array((-1.0, 0, 0))
-            inverted = array((0.0, 1, 0))
-            left = array((1.0, 0, 0))
-            d = {
-                "normal": dot(stable, normal) / norm(stable) / norm(normal),
-                "inverted": dot(stable, inverted) / norm(stable) / norm(inverted),
-                "left": dot(stable, left) / norm(stable) / norm(left),
-                "right": dot(stable, right) / norm(stable) / norm(right)
-            }
-            orientation = max(d, key=d.get)
-            if self.orientation != orientation:
-                self.orientation = orientation
-                #self.engage_mode(mode = orientation)
-                accelQueue.put(orientation)
-            time.sleep(0.15)
-
 
     def acceleration_read(self):
         if self.accelQueue.empty():
             return
         orientation = self.accelQueue.get()
-        print("ORIENTATION CHANGED TO: {orientation}".format(orientation = orientation))
         self.engage_mode(orientation)
 
 
@@ -605,7 +578,7 @@ class interface(QtGui.QWidget):
             log.info("change acceleration control to on")
             self.processAccelerationControl = Process(
                 target = acceleration_listen,
-                args = (self.accelQueue, self.orientation,)
+                args = (self.accelQueue, self.orientation)
             )
             self.processAccelerationControl.start()
             self.accelerometerStatus = "on"
@@ -630,22 +603,21 @@ class interface(QtGui.QWidget):
             return
         mode = self.acpi_queue.get()
         if mode == "rotation_lock":
-            print("ROTATION")
             self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
             if self.accelerometerStatus == "on":
                 self.accelerometerStatus = "off"
             else:
                 self.accelerometerStatus = "on"
             self.acceleration_control_switch(status = self.accelerometerStatus)
-        else:
-            print("DISPLAY POSITION")
+        elif mode == "display_position_change":
             #self.displayPositionStatus = "laptop" if self.displayPositionStatus == "tablet" else "laptop"
             if self.displayPositionStatus == "laptop":
                 self.displayPositionStatus = "tablet"
             else:
                 self.displayPositionStatus = "laptop"
-            print("DISPLAY POSITION CHANGED: {mode}".format(mode = mode))
             self.engage_mode(self.displayPositionStatus)
+        else:
+            log.error("Triggered acpi_read with unknwon mode {0}".format(mode))
 
 
     def display_position_control_switch(
@@ -679,26 +651,17 @@ class interface(QtGui.QWidget):
             mode = mode
         ))
         if mode == "tablet":
-            self.display_orientation(orientation     = "inverted")
             self.nipple_switch(status                = "off") 
             self.touchpad_switch(status              = "off")
-            time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
-            self.touchscreen_orientation(orientation = "inverted")
-            #self.touchscreen_switch(status           = "on")
             #self.acceleration_control_switch(status  = "on")
         elif mode == "laptop":
             self.display_orientation(orientation     = "normal")
-            self.touchpad_orientation(orientation    = "normal")
             self.touchpad_switch(status              = "on")
             self.nipple_switch(status                = "on")
-            time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
             self.touchscreen_orientation(orientation = "normal")
-            #self.touchscreen_switch(status           = "on")
             #self.acceleration_control_switch(status  = "off")
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation     = mode)
-            self.touchpad_orientation(orientation    = mode)
-            time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
             self.touchscreen_orientation(orientation = mode)
         else:
             log.error(
@@ -706,7 +669,18 @@ class interface(QtGui.QWidget):
                     mode = mode
                 )
             )
+            time.sleep(2)  # Switching modes too fast seems to cause trobule
             sys.exit()
+
+    def is_touchscreen_alive(self):
+        ''' Check if the touchscreen is alive '''
+        log.info("waiting for touchscreen to respond")
+        status = os.system('xinput list | grep -q "{touchscreen}"'.format(touchscreen = self.deviceNames["touchscreen"]))
+        if status == 0:
+            return True
+        else:
+            return False
+        
 
 def get_inputs():
     log.info("audit inputs")
@@ -756,7 +730,7 @@ def mean_list(
     ):
     return([sum(element)/len(element) for element in zip(*lists)])
 
-def acceleration_listen(self, accelQueue, old_orientation="normal"):
+def acceleration_listen(accelQueue, old_orientation="normal"):
     while True:
         # Get the mean of recent acceleration vectors.
         numberOfMeasurements = 6
@@ -793,17 +767,20 @@ def acpi_listen(acpi_queue):
     socketACPI.connect("/var/run/acpid.socket")
     while True:
         eventACPI = socketACPI.recv(4096)
-        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
-        if eventACPI == eventACPIRotationLock:
-            acpi_queue.put("rotation_lock")
         # Ubuntu 13.10 compatibility:
         #eventACPIDisplayPositionChange = \
         #    "ibm/hotkey HKEY 00000080 000060c0\n"
         # Ubuntu 14.04-15.10 compatibility:
         eventACPIDisplayPositionChange = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
-        if eventACPI == eventACPIDisplayPositionChange:
+        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        if eventACPI == eventACPIRotationLock:
+            acpi_queue.put("rotation_lock")
+        elif eventACPI == eventACPIDisplayPositionChange:
             log.info("display position change")
             acpi_queue.put("display_position_change")
+        else:
+            log.info("unknown acpi event triggered: {0}".format(eventACPI))
+            acpi_queue.put("unknown")
         time.sleep(0.1)
     socketACPI.close()
 
