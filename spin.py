@@ -610,7 +610,6 @@ class interface(QtGui.QWidget):
                 self.accelerometerStatus = "on"
             self.acceleration_control_switch(status = self.accelerometerStatus)
         elif mode == "display_position_change":
-            #self.displayPositionStatus = "laptop" if self.displayPositionStatus == "tablet" else "laptop"
             if self.displayPositionStatus == "laptop":
                 self.displayPositionStatus = "tablet"
             else:
@@ -651,10 +650,12 @@ class interface(QtGui.QWidget):
             mode = mode
         ))
         if mode == "tablet":
+            print(" *** TABLET ***")
             self.nipple_switch(status                = "off") 
             self.touchpad_switch(status              = "off")
             #self.acceleration_control_switch(status  = "on")
         elif mode == "laptop":
+            print(" *** LAPTOP ***")
             self.display_orientation(orientation     = "normal")
             self.touchpad_switch(status              = "on")
             self.nipple_switch(status                = "on")
@@ -767,6 +768,7 @@ def acpi_listen(acpi_queue):
     socketACPI.connect("/var/run/acpid.socket")
     while True:
         eventACPI = socketACPI.recv(4096)
+        print("ACPI EVENT: {0}".format(eventACPI))
         # Ubuntu 13.10 compatibility:
         #eventACPIDisplayPositionChange = \
         #    "ibm/hotkey HKEY 00000080 000060c0\n"
