@@ -116,7 +116,7 @@ class interface(QtGui.QWidget):
         self.accelerometerStatus = "off"
         self.accelQueue = Queue()
         self.accelTimer = QTimer()
-        self.accelTimer.timeout.connect(self.accelRead)
+        self.accelTimer.timeout.connect(self.acceleration_read)
         self.accelTimer.start(100)
         self.acceleration_control_switch(status = "off")
         # Start a queue for reading display position
@@ -557,7 +557,7 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-    def acceleration_control(self, accelQueue):
+    def acceleration_listen(self, accelQueue):
         while True:
             # Get the mean of recent acceleration vectors.
             numberOfMeasurements = 6
@@ -588,12 +588,14 @@ class interface(QtGui.QWidget):
                 accelQueue.put(orientation)
             time.sleep(0.15)
 
-    def accelRead(self):
+
+    def acceleration_read(self):
         if self.accelQueue.empty():
             return
         orientation = self.accelQueue.get()
         print("ORIENTATION CHANGED TO: {orientation}".format(orientation = orientation))
         self.engage_mode(orientation)
+
 
     def acceleration_control_switch(
         self,
@@ -602,8 +604,8 @@ class interface(QtGui.QWidget):
         if status == "on":
             log.info("change acceleration control to on")
             self.processAccelerationControl = Process(
-                target = self.acceleration_control,
-                args = (self.accelQueue,)
+                target = acceleration_listen,
+                args = (self.accelQueue, self.orientation,)
             )
             self.processAccelerationControl.start()
             self.accelerometerStatus = "on"
@@ -622,61 +624,26 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-    def display_position_control(self, acpi_queue):
-        socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        socketACPI.connect("/var/run/acpid.socket")
-        #log.info("display position is {displayPositionStatus}".format(
-        #    displayPositionStatus = self.displayPositionStatus
-        #    )
-        #)
-        while True:
-            eventACPI = socketACPI.recv(4096)
-            # Ubuntu 13.10 compatibility:
-            #eventACPIDisplayPositionChange = \
-            #    "ibm/hotkey HKEY 00000080 000060c0\n"
-            # Ubuntu 14.04 compatibility:
-            eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
-            eventACPIDisplayPositionChange = \
-                "ibm/hotkey LEN0068:00 00000080 000060c0\n"
-            if eventACPI == eventACPIRotationLock:
-                acpi_queue.put("rotatelock")
-            if eventACPI == eventACPIDisplayPositionChange:
-                log.info("display position change")
-                acpi_queue.put("change")
-                #if self.displayPositionStatus == "laptop":
-                #    #self.engage_mode(mode = "tablet")
-                #    self.displayPositionStatus = "tablet"
-                #    log.info(
-                #        "display position is {displayPositionStatus}".format(
-                #            displayPositionStatus = self.displayPositionStatus
-                #        )
-                #    )
-                #elif self.displayPositionStatus == "tablet":
-                #    self.engage_mode(mode = "laptop")
-                #    self.displayPositionStatus = "laptop"
-                #    log.info(
-                #        "display position is {displayPositionStatus}".format(
-                #            displayPositionStatus = self.displayPositionStatus
-                #        )
-                #    )
-            time.sleep(0.15)
-        socketACPI.close()
-
 
     def acpi_read(self):
         if self.acpi_queue.empty():
             return
         mode = self.acpi_queue.get()
         if mode == "rotation_lock":
+            print("ROTATION")
             self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
-            print("TODO! Toggle accelerometer")
-            print(self.accelerometerStatus)
-            self.accelerometerStatus = "off" if self.accelerometerStatus == "on" else "off"
-            print(self.accelerometerStatus)
+            if self.accelerometerStatus == "on":
+                self.accelerometerStatus = "off"
+            else:
+                self.accelerometerStatus = "on"
             self.acceleration_control_switch(status = self.accelerometerStatus)
-            print(self.accelerometerStatus)
         else:
-            self.displayPositionStatus = "laptop" if self.displayPositionStatus == "tablet" else "laptop"
+            print("DISPLAY POSITION")
+            #self.displayPositionStatus = "laptop" if self.displayPositionStatus == "tablet" else "laptop"
+            if self.displayPositionStatus == "laptop":
+                self.displayPositionStatus = "tablet"
+            else:
+                self.displayPositionStatus = "laptop"
             print("DISPLAY POSITION CHANGED: {mode}".format(mode = mode))
             self.engage_mode(self.displayPositionStatus)
 
@@ -717,8 +684,8 @@ class interface(QtGui.QWidget):
             self.touchpad_switch(status              = "off")
             time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
             self.touchscreen_orientation(orientation = "inverted")
-            self.touchscreen_switch(status           = "on")
-            self.acceleration_control_switch(status  = "on")
+            #self.touchscreen_switch(status           = "on")
+            #self.acceleration_control_switch(status  = "on")
         elif mode == "laptop":
             self.display_orientation(orientation     = "normal")
             self.touchpad_orientation(orientation    = "normal")
@@ -726,8 +693,8 @@ class interface(QtGui.QWidget):
             self.nipple_switch(status                = "on")
             time.sleep(1.5) # The touchscreen is not detectable straight after the screen rotates.
             self.touchscreen_orientation(orientation = "normal")
-            self.touchscreen_switch(status           = "on")
-            self.acceleration_control_switch(status  = "off")
+            #self.touchscreen_switch(status           = "on")
+            #self.acceleration_control_switch(status  = "off")
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation     = mode)
             self.touchpad_orientation(orientation    = mode)
@@ -789,20 +756,51 @@ def mean_list(
     ):
     return([sum(element)/len(element) for element in zip(*lists)])
 
+def acceleration_listen(self, accelQueue, old_orientation="normal"):
+    while True:
+        # Get the mean of recent acceleration vectors.
+        numberOfMeasurements = 6
+        measurements = []
+        for measurement in range(0, numberOfMeasurements):
+            time.sleep(0.25)
+            measurements.append(AccelerationVector())
+        stableAcceleration = mean_list(lists = measurements)
+        log.info("stable acceleration vector: {vector}".format(
+            vector = stableAcceleration
+        ))
+        # Using numpy to compare rotation vectors.
+        stable = array((stableAcceleration[0], stableAcceleration[1], stableAcceleration[2]))
+        normal = array((0.0, -1, 0))
+        right = array((-1.0, 0, 0))
+        inverted = array((0.0, 1, 0))
+        left = array((1.0, 0, 0))
+        d = {
+            "normal": dot(stable, normal) / norm(stable) / norm(normal),
+            "inverted": dot(stable, inverted) / norm(stable) / norm(inverted),
+            "left": dot(stable, left) / norm(stable) / norm(left),
+            "right": dot(stable, right) / norm(stable) / norm(right)
+        }
+        orientation = max(d, key=d.get)
+        if old_orientation != orientation:
+            old_orientation = orientation
+            accelQueue.put(orientation)
+        time.sleep(0.15)
+
+
+
 def acpi_listen(acpi_queue):
     socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     socketACPI.connect("/var/run/acpid.socket")
     while True:
         eventACPI = socketACPI.recv(4096)
+        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        if eventACPI == eventACPIRotationLock:
+            acpi_queue.put("rotation_lock")
         # Ubuntu 13.10 compatibility:
         #eventACPIDisplayPositionChange = \
         #    "ibm/hotkey HKEY 00000080 000060c0\n"
-        # Ubuntu 14.04 compatibility:
-        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        # Ubuntu 14.04-15.10 compatibility:
         eventACPIDisplayPositionChange = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
-        if eventACPI == eventACPIRotationLock:
-            log.info("rotation lock key pressed")
-            acpi_queue.put("rotation_lock")
         if eventACPI == eventACPIDisplayPositionChange:
             log.info("display position change")
             acpi_queue.put("display_position_change")
