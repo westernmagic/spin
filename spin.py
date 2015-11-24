@@ -113,12 +113,12 @@ class interface(QtGui.QWidget):
         # engage display position control
         self.displayPositionStatus = "laptop"
         # Start a queue for reading screen rotation from the accelerometer
-        self.accelerometerStatus = "off"
+        self.accelerometerStatus = "on"
         self.accelQueue = Queue()
         self.accelTimer = QTimer()
         self.accelTimer.timeout.connect(self.acceleration_read)
         self.accelTimer.start(100)
-        self.acceleration_control_switch(status = "off")
+        #self.acceleration_control_switch(status = "on")
         # Start a queue for reading display position
         self.acpi_queue = Queue()
         self.acpi_timer = QTimer()
@@ -604,11 +604,12 @@ class interface(QtGui.QWidget):
         mode = self.acpi_queue.get()
         if mode == "rotation_lock":
             self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
-            if self.accelerometerStatus == "on":
-                self.accelerometerStatus = "off"
-            else:
-                self.accelerometerStatus = "on"
-            self.acceleration_control_switch(status = self.accelerometerStatus)
+            os.system('/home/ragnar/Code/spin/spin_ui.py')
+            #if self.accelerometerStatus == "on":
+            #    self.accelerometerStatus = "off"
+            #else:
+            #    self.accelerometerStatus = "on"
+            #self.acceleration_control_switch(status = self.accelerometerStatus)
         elif mode == "display_position_change":
             if self.displayPositionStatus == "laptop":
                 self.displayPositionStatus = "tablet"
@@ -651,27 +652,40 @@ class interface(QtGui.QWidget):
         ))
         if mode == "tablet":
             print(" *** TABLET ***")
+            try:
+                conf_dir = os.getenv('XDG_CONFIG_HOME', "{home}/.config/".format(home = os.environ['HOME']))
+                settings_path = os.path.join(conf_dir, 'spin')
+                settings = open(settings_path, 'r')
+                orientation = settings.readline().rstrip('\n')
+                settings.close()
+            except IOError:
+                log.info("unable to read default orientation from file")
+                orientation = "normal"
             self.nipple_switch(status                = "off") 
             self.touchpad_switch(status              = "off")
-            #self.acceleration_control_switch(status  = "on")
+            #self.acceleration_control_switch(status  = "off")
+            self.display_orientation(orientation     = orientation)
+            self.touchscreen_orientation(orientation = orientation)
         elif mode == "laptop":
             print(" *** LAPTOP ***")
-            self.display_orientation(orientation     = "normal")
+            #self.acceleration_control_switch(status  = "off")
             self.touchpad_switch(status              = "on")
             self.nipple_switch(status                = "on")
+            self.display_orientation(orientation     = "normal")
             self.touchscreen_orientation(orientation = "normal")
-            #self.acceleration_control_switch(status  = "off")
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation     = mode)
             self.touchscreen_orientation(orientation = mode)
+            self.acceleration_control_switch(status  = "off")
         else:
             log.error(
                 "unknown mode \"{mode}\" requested".format(
                     mode = mode
                 )
             )
-            time.sleep(2)  # Switching modes too fast seems to cause trobule
             sys.exit()
+        time.sleep(2)  # Switching modes too fast seems to cause trobule
+
 
     def is_touchscreen_alive(self):
         ''' Check if the touchscreen is alive '''
