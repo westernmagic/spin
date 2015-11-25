@@ -38,7 +38,7 @@ Usage:
 Options:
     -h,--help        display help message
     --version        display version and exit
-    --nogui          non-GUI mode
+    --gui            GUI mode for debugging
     --debugpassive   display commands without executing
 """
 
@@ -93,6 +93,8 @@ docopt = smuggle(
 
 class interface(QtGui.QWidget):
 
+    UI_SOCKET = "/tmp/.spin_ui"
+
     def __init__(
         self,
         options = None
@@ -116,16 +118,24 @@ class interface(QtGui.QWidget):
         self.accelerometerStatus = "on"
         self.accelQueue = Queue()
         self.accelTimer = QTimer()
-        self.accelTimer.timeout.connect(self.acceleration_read)
+        self.accelTimer.timeout.connect(self.acceleration_listen)
         self.accelTimer.start(100)
         #self.acceleration_control_switch(status = "on")
         # Start a queue for reading display position
         self.acpi_queue = Queue()
         self.acpi_timer = QTimer()
-        self.acpi_timer.timeout.connect(self.acpi_read)
+        self.acpi_timer.timeout.connect(self.acpi_listen)
         self.acpi_timer.start(110)
         self.display_position_control_switch(status = "on")
-        if not options["--nogui"]:
+        # Listen for commands from the UI
+        if os.path.exists(self.UI_SOCKET):
+            os.remove(self.UI_SOCKET)
+        self.ui_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.ui_socket.bind(self.UI_SOCKET)
+        self.ui_timer = QTimer()
+        self.acpi_timer.timeout.connect(self.ui_listen)
+        self.acpi_timer.start(105)
+        if options["--gui"]:
             # create buttons
             buttonsList = []
             # button: tablet mode
@@ -317,13 +327,15 @@ class interface(QtGui.QWidget):
             # set window position
             self.move(0, 0)
             self.show()
-        elif options["--nogui"]:
+        elif not options["--gui"]:
             log.info("non-GUI mode")
 
     def close_event(self, event):
         log.info("terminate {name}".format(name = name))
         self.stylus_proximity_control_switch(status = "off")
         self.display_position_control_switch(status = "off")
+        self.ui_socket.close()
+        os.remove(self.UI_SOCKET)
         self.deleteLater() 
 
     def display_orientation(
@@ -563,7 +575,13 @@ class interface(QtGui.QWidget):
             sys.exit()
 
 
-    def acceleration_read(self):
+    def ui_listen(self):
+        orientation = self.ui_socket.recv(1024)
+        if orientation:
+            self.engage_mode(orientation)
+
+
+    def acceleration_listen(self):
         if self.accelQueue.empty():
             return
         orientation = self.accelQueue.get()
@@ -577,7 +595,7 @@ class interface(QtGui.QWidget):
         if status == "on":
             log.info("change acceleration control to on")
             self.processAccelerationControl = Process(
-                target = acceleration_listen,
+                target = acceleration_sensor,
                 args = (self.accelQueue, self.orientation)
             )
             self.processAccelerationControl.start()
@@ -598,7 +616,7 @@ class interface(QtGui.QWidget):
             sys.exit()
 
 
-    def acpi_read(self):
+    def acpi_listen(self):
         if self.acpi_queue.empty():
             return
         mode = self.acpi_queue.get()
@@ -617,7 +635,7 @@ class interface(QtGui.QWidget):
                 self.displayPositionStatus = "laptop"
             self.engage_mode(self.displayPositionStatus)
         else:
-            log.error("Triggered acpi_read with unknwon mode {0}".format(mode))
+            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
 
 
     def display_position_control_switch(
@@ -627,7 +645,7 @@ class interface(QtGui.QWidget):
         if status == "on":
             log.info("change display position control to on")
             self.processdisplay_position_control = Process(
-                target = acpi_listen,
+                target = acpi_sensor,
                 args = (self.acpi_queue,)
             )
             self.processdisplay_position_control.start()
@@ -745,7 +763,7 @@ def mean_list(
     ):
     return([sum(element)/len(element) for element in zip(*lists)])
 
-def acceleration_listen(accelQueue, old_orientation="normal"):
+def acceleration_sensor(accelQueue, old_orientation="normal"):
     while True:
         # Get the mean of recent acceleration vectors.
         numberOfMeasurements = 6
@@ -776,8 +794,7 @@ def acceleration_listen(accelQueue, old_orientation="normal"):
         time.sleep(0.15)
 
 
-
-def acpi_listen(acpi_queue):
+def acpi_sensor(acpi_queue):
     socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     socketACPI.connect("/var/run/acpid.socket")
     while True:
