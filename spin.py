@@ -75,6 +75,7 @@ def smuggle(
 
 import os
 import sys
+import signal
 import glob
 import subprocess
 import socket
@@ -102,6 +103,8 @@ class interface(QtGui.QWidget):
         self.options = options
         super(interface, self).__init__()
         log.info("initiate {name}".format(name = name))
+        # Capture SIGINT
+        signal.signal(signal.SIGINT, self.signal_handler)
         # Audit the inputs available.
         self.deviceNames = get_inputs()
         if options["--debugpassive"] is True:
@@ -131,6 +134,7 @@ class interface(QtGui.QWidget):
         if os.path.exists(self.UI_SOCKET):
             os.remove(self.UI_SOCKET)
         self.ui_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.ui_socket.setblocking(0)
         self.ui_socket.bind(self.UI_SOCKET)
         self.ui_timer = QTimer()
         self.acpi_timer.timeout.connect(self.ui_listen)
@@ -330,12 +334,21 @@ class interface(QtGui.QWidget):
         elif not options["--gui"]:
             log.info("non-GUI mode")
 
+    def signal_handler(self, signal, frame):
+        print('You pressed Ctrl+C!')
+        self.close_event('bla')
+        sys.exit(0)
+
+
     def close_event(self, event):
         log.info("terminate {name}".format(name = name))
         self.stylus_proximity_control_switch(status = "off")
         self.display_position_control_switch(status = "off")
-        self.ui_socket.close()
-        os.remove(self.UI_SOCKET)
+        self.acceleration_control_switch(status = "off")
+        try:
+            os.remove(self.UI_SOCKET)
+        except:
+            pass
         self.deleteLater() 
 
     def display_orientation(
@@ -576,9 +589,12 @@ class interface(QtGui.QWidget):
 
 
     def ui_listen(self):
-        orientation = self.ui_socket.recv(1024)
-        if orientation:
-            self.engage_mode(orientation)
+        try:
+            orientation = self.ui_socket.recv(1024)
+            if orientation:
+                self.engage_mode(orientation)
+        except:
+            pass
 
 
     def acceleration_listen(self):
@@ -651,7 +667,10 @@ class interface(QtGui.QWidget):
             self.processdisplay_position_control.start()
         elif status == "off":
             log.info("change display position control to off")
-            self.processdisplay_position_control.terminate()
+            try:
+                self.processdisplay_position_control.terminate()
+            except:
+                pass
         else:
             log.error(
                 "unknown display position control status \"{orientation}\" "
