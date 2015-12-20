@@ -117,7 +117,7 @@ class Settings():
 
     def create_default_settings(self):
         ''' Create a settings file (rotation lock off and orientation inverted) '''
-        jsettings = json.dumps({ 'rotation-lock': True, 'orientation': 'normal' },
+        jsettings = json.dumps({ 'orientation': 'automatic' },
                                sort_keys=True,
                                indent=4,
                                separators=(',', ': ')
@@ -594,6 +594,7 @@ class Daemon(QtCore.QObject):
             else:
                 self.display_orientation(orientation = orientation)
                 self.touchscreen_orientation(orientation = orientation)
+            os.system('notify-send "Tablet Mode"')
         elif mode == "laptop":
             print(" *** LAPTOP ***")
             self.locked = True
@@ -601,6 +602,7 @@ class Daemon(QtCore.QObject):
             self.nipple_switch(status = "on")
             self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
+            os.system('notify-send "Laptop Mode"')
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation = mode)
             self.touchscreen_orientation(orientation = mode)
@@ -608,9 +610,11 @@ class Daemon(QtCore.QObject):
             if self.locked is True:
                 self.locked = False
                 log.info("Rotation lock disabled")
+                os.system('notify-send "Rotation Lock Disabled"')
             else:
                 self.locked = True
                 log.info("Rotation lock enabled")
+                os.system('notify-send "Rotation Lock Enabled"')
         else:
             log.error(
                 "unknown mode \"{mode}\" requested".format(
