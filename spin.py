@@ -364,6 +364,8 @@ class interface(QtGui.QWidget):
                     orientation = orientation
                 )
             )
+            # TODO! Hack to reset calibration.
+            engage_command("xsetwacom --set 10 ResetArea")
         else:
             log.error(
                 "unknown display orientation \"{orientation}\" "
