@@ -40,13 +40,8 @@ Options:
     --version                 display version and exit
     --gui                     GUI mode for debugging
     --debugpassive            display commands without executing
-    --settings                open the setting dialog
     -m,--mode                 toggle between laptop and tablet/tent mode
-    -l,--laptop-mode          set the machine to laptop mode
-    -t,--tablet-mode          set the machine to tablet mode
     -r,--rotation-lock        toggle rotation lock on/off
-    --rotation-lock-on        turn rotation locking on
-    --rotation-lock-off       turn rotation locking off
     --daemon                  run in this mode in the background
 """
 
@@ -90,16 +85,12 @@ import subprocess
 import socket
 import time
 import logging
-import json
-from   PyQt4 import QtGui
 from   PyQt4 import QtCore
-from functools import partial
 from multiprocessing import Process, Queue
 from numpy import (array, dot)
 from numpy.linalg import norm
 
-SPIN_SOCKET = "/tmp/yoga_spin.socket"
-CONF_FILE = "{home}/.config/yoga_spin".format(home = os.environ['HOME'])
+SPIN_SOCKET = '/tmp/yoga_spin.socket'
 
 # TODO! Remove this. Package is included in Ubuntu 15.10...or replace with other
 docopt = smuggle(
@@ -107,108 +98,16 @@ docopt = smuggle(
     URL = "https://rawgit.com/docopt/docopt/master/docopt.py"
 )
 
-class Settings():
-
-    def __init__(self):
-        # Check for existing settings file.
-        if not os.path.exists(CONF_FILE):
-            self.create_default_settings()
-        self.get('orientation') # TODO!
-
-    def create_default_settings(self):
-        ''' Create a settings file (rotation lock off and orientation inverted) '''
-        jsettings = json.dumps({ 'orientation': 'automatic' },
-                               sort_keys=True,
-                               indent=4,
-                               separators=(',', ': ')
-        )
-        try:
-            settings = open(CONF_FILE, 'w')
-            settings.write(jsettings)
-            settings.close()
-        except IOError:
-            info.error("Failed to write settings file")
-
-    def get(self, key):
-        f = open(CONF_FILE, 'r')
-        settings = json.loads(f.read())
-        f.close()
-        if key in settings:
-            return(settings[key])
-        else:
-            log.error("Setting for {key} not found".format(key = key))
-
-    def set(self, key, value):
-        f = open(CONF_FILE, 'r')
-        settings = json.loads(f.read())
-        f.close()
-        if key in settings:
-            f = open(CONF_FILE, 'w')
-            settings[key] = value
-            f.write(
-                json.dumps(
-                    settings,
-                    sort_keys=True,
-                    indent=4,
-                    separators=(',', ': ')
-                )
-            )
-            f.close()
-        else:
-            log.error("Settings for {key} not found".format(key = key))
-
-
-class SettingsUI(QtGui.QWidget):
-
-    def __init__(self):
-        super(SettingsUI, self).__init__()
-        log.info("initiate {name}".format(name = name))
-        # Capture SIGINT
-        signal.signal(signal.SIGINT, self.signal_handler)
-        # Build the dialog
-        log.info("Build a settings dialog")
-        self.settings = Settings()
-        self.orientation = self.settings.get('orientation')
-        self.settings_ui()
-
-    def settings_ui(self):
-        self.move(QtGui.QApplication.desktop().screen().rect().center()- self.rect().center())
-        self.setWindowTitle('Tablet Mode Settings')
-        main_layout = QtGui.QVBoxLayout(self)
-
-        o_layout = QtGui.QVBoxLayout()
-        o_box = QtGui.QGroupBox("Screen Orientation")
-        o_box.setLayout(o_layout)
-        o_box.setToolTip("Set the default screen orienation when in Tablet mode")
-        o_btn_group = QtGui.QButtonGroup()
-        o_buttons = []
-        for ori in ['automatic', 'normal', 'inverted', 'left', 'right']:
-            button = QtGui.QRadioButton(ori)
-            button.clicked.connect( partial( self.orientation_change, button) )
-            o_btn_group.addButton(button)
-            o_layout.addWidget(button)
-            o_buttons.append(button)
-            if ori == self.orientation:
-                button.setChecked(True)
-        main_layout.addWidget(o_box)
-
-        self.show()
-
-    def orientation_change(self, orientation):
-        self.settings.set('orientation', str(orientation.text()))
-
-
-    def signal_handler(self, signal, frame):
-        log.info('You pressed Ctrl+C!')
-        sys.exit(0)
-
-
 class Daemon(QtCore.QObject):
 
     def __init__(self, options = None):
         super(Daemon, self).__init__()
         # Capture SIGINT
         signal.signal(signal.SIGINT, self.signal_handler)
+        # Check if spin is running.
+        if os.path.exists(SPIN_SOCKET):
+            log.error("Only one instance of Yoga Spin Daemon can be run at a time")
+            sys.exit()
         # Handle debug option
         self.options = options
         log.info("initiate {name}".format(name = name))
@@ -218,14 +117,12 @@ class Daemon(QtCore.QObject):
             log.info("device names: {deviceNames}".format(
                 deviceNames = self.deviceNames
             ))
-        # Get default settings
-        self.settings = Settings()
-        # Engage stylus proximity control
-        self.stylus_proximity_control_switch(status = "on")
         # Set default laptop mode
         self.mode = "laptop"
         self.orientation = "normal"
         self.locked = True
+        # Engage stylus proximity control
+        self.stylus_proximity_control_switch(status = "on")
         # Start a queue for reading screen rotation from the accelerometer
         self.accelerometerStatus = "on"
         self.accelQueue = Queue()
@@ -251,6 +148,8 @@ class Daemon(QtCore.QObject):
 
     def close_event(self, event):
         log.info("terminate {name}".format(name = name))
+        if self.mode == "tablet":
+            self.engage_mode("laptop")
         self.stylus_proximity_control_switch(status = "off")
         self.acceleration_control_switch(status = "off")
         try:
@@ -526,12 +425,7 @@ class Daemon(QtCore.QObject):
             print(" *** TABLET ***")
             self.nipple_switch(status = "off") 
             self.touchpad_switch(status = "off")
-            orientation = self.settings.get('orientation')
-            if orientation == "automatic":
-                self.locked = False
-            else:
-                self.display_orientation(orientation = orientation)
-                self.touchscreen_orientation(orientation = orientation)
+            self.locked = False
             os.system('notify-send "Tablet Mode"')
         elif mode == "laptop":
             print(" *** LAPTOP ***")
@@ -719,12 +613,7 @@ def main(options):
     log.level  = logging.INFO
 
     # TODO! Option parser acceps half options, like --sett.  Replace it.
-    if options["--settings"]:
-        log.info("Opening the settings dialog")
-        app = QtGui.QApplication(sys.argv)
-        settings = SettingsUI()
-        sys.exit(app.exec_())
-    elif options["--mode"]:
+    if options["--mode"]:
         log.info("Toggle between tablet and laptop mode")
         send_command("toggle")
     elif options["--rotation-lock"]:
