@@ -168,7 +168,6 @@ class SettingsUI(QtGui.QWidget):
         # Build the dialog
         log.info("Build a settings dialog")
         self.settings = Settings()
-        self.rotation_lock = self.settings.get('rotation-lock')
         self.orientation = self.settings.get('orientation')
         self.settings_ui()
 
@@ -177,20 +176,13 @@ class SettingsUI(QtGui.QWidget):
         self.setWindowTitle('Tablet Mode Settings')
         main_layout = QtGui.QVBoxLayout(self)
 
-        rotation_lock = QtGui.QCheckBox('Rotation Lock')
-        rotation_lock.stateChanged.connect( partial( self.rotation_lock_change, rotation_lock) )
-        rotation_lock.setToolTip("Set the default rotation lock status in Tablet mode")
-        if self.rotation_lock is True:
-            rotation_lock.setChecked(True)
-        main_layout.addWidget(rotation_lock)
-
         o_layout = QtGui.QVBoxLayout()
         o_box = QtGui.QGroupBox("Screen Orientation")
         o_box.setLayout(o_layout)
         o_box.setToolTip("Set the default screen orienation when in Tablet mode")
         o_btn_group = QtGui.QButtonGroup()
         o_buttons = []
-        for ori in ['normal', 'inverted', 'left', 'right']:
+        for ori in ['automatic', 'normal', 'inverted', 'left', 'right']:
             button = QtGui.QRadioButton(ori)
             button.clicked.connect( partial( self.orientation_change, button) )
             o_btn_group.addButton(button)
@@ -206,8 +198,6 @@ class SettingsUI(QtGui.QWidget):
     def orientation_change(self, orientation):
         self.settings.set('orientation', str(orientation.text()))
 
-    def rotation_lock_change(self, checkbox):
-        self.settings.set('rotation-lock', checkbox.isChecked())
 
     def signal_handler(self, signal, frame):
         log.info('You pressed Ctrl+C!')
@@ -236,7 +226,8 @@ class Daemon(QtCore.QObject):
         # engage acceleration control
         self.orientation = "normal"
         # engage display position control
-        self.displayPositionStatus = "laptop"
+        self.mode = "laptop"
+        self.locked = True
         # Start a queue for reading screen rotation from the accelerometer
         self.accelerometerStatus = "on"
         self.accelQueue = Queue()
@@ -500,7 +491,8 @@ class Daemon(QtCore.QObject):
         if self.accelQueue.empty():
             return
         orientation = self.accelQueue.get()
-        self.engage_mode(orientation)
+        if not self.locked:
+            self.engage_mode(orientation)
 
 
     def acceleration_control_switch(
@@ -587,41 +579,38 @@ class Daemon(QtCore.QObject):
     def engage_mode(self, mode = None):
         log.info("engage mode {mode}".format(mode = mode))
         if mode == "toggle":
-            if self.displayPositionStatus == "laptop":
+            if self.mode == "laptop":
                 mode = "tablet"
             else:
                 mode = "laptop"
+            self.mode = mode
         if mode == "tablet":
             print(" *** TABLET ***")
-            try:
-                conf_dir = os.getenv('XDG_CONFIG_HOME', "{home}/.config/".format(home = os.environ['HOME']))
-                settings_path = os.path.join(conf_dir, 'spin')
-                settings = open(settings_path, 'r')
-                orientation = settings.readline().rstrip('\n')
-                settings.close()
-            except IOError:
-                log.info("unable to read default orientation from file")
-                orientation = "normal"
-            self.nipple_switch(status                = "off") 
-            self.touchpad_switch(status              = "off")
-            self.display_orientation(orientation     = orientation)
-            self.touchscreen_orientation(orientation = orientation)
-            self.displayPositionStatus = "tablet"
+            self.nipple_switch(status = "off") 
+            self.touchpad_switch(status = "off")
+            orientation = self.settings.get('orientation')
+            if orientation == "automatic":
+                self.locked = False
+            else:
+                self.display_orientation(orientation = orientation)
+                self.touchscreen_orientation(orientation = orientation)
         elif mode == "laptop":
             print(" *** LAPTOP ***")
-            self.touchpad_switch(status              = "on")
-            self.nipple_switch(status                = "on")
-            self.display_orientation(orientation     = "normal")
+            self.locked = True
+            self.touchpad_switch(status = "on")
+            self.nipple_switch(status = "on")
+            self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
-            self.displayPositionStatus = "laptop"
         elif mode in ["left", "right", "inverted", "normal"]:
-            self.display_orientation(orientation     = mode)
+            self.display_orientation(orientation = mode)
             self.touchscreen_orientation(orientation = mode)
-            # self.acceleration_control_switch(status  = "off")
-        elif mode == "lock":
-            pass
-        elif mode == "unlock":
-            pass
+        elif mode == "togglelock":
+            if self.locked is True:
+                self.locked = False
+                log.info("Rotation lock disabled")
+            else:
+                self.locked = True
+                log.info("Rotation lock enabled")
         else:
             log.error(
                 "unknown mode \"{mode}\" requested".format(
@@ -791,22 +780,18 @@ class AccelerationVector(list):
         self.update()
         return(list.__repr__(self))
 
-def mode():
-    # TODO! Make it a toggle
+def send_command(command):
     if os.path.exists(SPIN_SOCKET):
         command_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:
             command_socket.connect(SPIN_SOCKET)
-            command_socket.send( "toggle" )
+            command_socket.send(command)
             log.info("Connected to socket")
         except:
             log.info("Failed to send mode change to the spin daemon")
     else:
         log.error("Socket does not exist. Is the spin deamon running.")
 
-def rotation_lock():
-    # TODO! Make it a toggle and implement
-    pass
 
 def main(options):
 
@@ -828,10 +813,10 @@ def main(options):
         sys.exit(app.exec_())
     elif options["--mode"]:
         log.info("Toggle between tablet and laptop mode")
-        mode()
+        send_command("toggle")
     elif options["--rotation-lock"]:
         log.info("Toggle the rotation lock on/off")
-        rotation_lock()
+        send_command("togglelock")
     elif options["--daemon"]:
         log.info("Starting Yoga Spin background daemon")
         app = QtCore.QCoreApplication(sys.argv)
@@ -840,7 +825,6 @@ def main(options):
     else:
         log.info("No options passed. Doing nothing")
         pass
-    #sys.exit(application.exec_())
 
 if __name__ == "__main__":
     options = docopt.docopt(__doc__)
