@@ -4,17 +4,17 @@ a small utility to assist in setting usage modes of laptop-tablet devices
 
 ## about this fork
 
-This is a fork of wdbm/spin. I'm currently working in the yoga12-2nd-gen branch, to get everything working properly with my Thinkpad Yoga 12 2nd Gen machine under Ubuntu 15.10. So far I've done the following changes:
+This is a fork of wdbm/spin. I'm currently working in the yoga12-2nd-gen branch, to get everything working properly with my Thinkpad Yoga 12 2nd Gen machine under Ubuntu 15.10. It's currently not fully done, but getting there. There are some major changes, including:
 
 - Improved the handling of the accelerometer using vector math, so it detects the correct orientation.
-- Moved all changes to the screen rotation to the mani process, and use messaging from the subprocesses to tell the main process what to do.
+- Moved all changes to the screen rotation to the main process, and use messaging from the subprocesses to tell the main process what to do.
 - Added support for the rotation lock key on the side of the ThinkPad Yoga 12.
 - It now waits for the touchscreen to be ready, before attempting to rotate it.
 
 Known issues:
 
-- The display position detector triggers once in tablet mode, when the accelerometer detector is not running, but twice (in tent and tablet mode) when it's not. This confuses the script, so you sometimes wind up in laptopt mode, when you should be in tablet mode, and vice versa.
-- Sometimes the keyboard gets turned off, when it's in laptop mode. I think this is related to the above issue.
+- I've yet to get the display position detector to differentiate when going from tent mode, to tablet or laptop mode, so am currently unable to use it to automatically switch between tablet and laptop modes. I'll shortly be adding a clickable icon that lets you manually switch instead. It's not ideal, and I've posted about this upstream to the systemd folks, so hopefully we'll have this fully automated some day.
+- There is some issue with Wacom calibration getting worse each time you calibrate. I've included some code in spin.py that resets the calibration each time the screen is rotated, but this is not ideal. I need to figure out exactly what is going on here. It may be related to the screen reporting the wrong PPI in Gimp (96x96 on Linux and 144x144 on Windows, correct I believe is 177x177), so if the calibration tool may be getting the incorrect screen size or ppi.
 
 Other than that, it's almost done.
 

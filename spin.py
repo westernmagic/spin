@@ -36,10 +36,13 @@ Usage:
     spin.py [options]
 
 Options:
-    -h,--help        display help message
-    --version        display version and exit
-    --gui            GUI mode for debugging
-    --debugpassive   display commands without executing
+    -h,--help                 display help message
+    --version                 display version and exit
+    --gui                     GUI mode for debugging
+    --debugpassive            display commands without executing
+    -m,--mode                 toggle between laptop and tablet/tent mode
+    -r,--rotation-lock        toggle rotation lock on/off
+    --daemon                  run in this mode in the background
 """
 
 name    = "spin"
@@ -48,6 +51,7 @@ version = "2015-04-30T0256Z"
 import imp
 import urllib
 
+# TODO! Remove this, the module being smuggled in is available in Ubuntu 15.10
 def smuggle(
     moduleName = None,
     URL        = None
@@ -81,275 +85,86 @@ import subprocess
 import socket
 import time
 import logging
-from   PyQt4 import QtGui
-from   PyQt4.QtCore import QTimer
+from   PyQt4 import QtCore
 from multiprocessing import Process, Queue
 from numpy import (array, dot)
 from numpy.linalg import norm
 
+SPIN_SOCKET = '/tmp/yoga_spin.socket'
+
+# TODO! Remove this. Package is included in Ubuntu 15.10...or replace with other
 docopt = smuggle(
     moduleName = "docopt",
     URL = "https://rawgit.com/docopt/docopt/master/docopt.py"
 )
 
-class interface(QtGui.QWidget):
+class Daemon(QtCore.QObject):
 
-    UI_SOCKET = "/tmp/.spin_ui"
-
-    def __init__(
-        self,
-        options = None
-        ):
-        self.options = options
-        super(interface, self).__init__()
-        log.info("initiate {name}".format(name = name))
+    def __init__(self, options = None):
+        super(Daemon, self).__init__()
         # Capture SIGINT
         signal.signal(signal.SIGINT, self.signal_handler)
+        # Check if spin is running.
+        if os.path.exists(SPIN_SOCKET):
+            log.error("Only one instance of Yoga Spin Daemon can be run at a time")
+            sys.exit()
+        # Handle debug option
+        self.options = options
+        log.info("initiate {name}".format(name = name))
         # Audit the inputs available.
         self.deviceNames = get_inputs()
         if options["--debugpassive"] is True:
             log.info("device names: {deviceNames}".format(
                 deviceNames = self.deviceNames
             ))
-        # engage stylus proximity control
-        self.stylus_proximity_control_switch(status = "on")
-        # engage acceleration control
+        # Set default laptop mode
+        self.mode = "laptop"
         self.orientation = "normal"
-        # engage display position control
-        self.displayPositionStatus = "laptop"
+        self.locked = True
+        # Engage stylus proximity control
+        self.stylus_proximity_control_switch(status = "on")
         # Start a queue for reading screen rotation from the accelerometer
         self.accelerometerStatus = "on"
         self.accelQueue = Queue()
-        self.accelTimer = QTimer()
+        self.accelTimer = QtCore.QTimer()
         self.accelTimer.timeout.connect(self.acceleration_listen)
         self.accelTimer.start(100)
-        #self.acceleration_control_switch(status = "on")
-        # Start a queue for reading display position
+        self.acceleration_control_switch(status = "on")
+        # Listen for commands through a socket
+        if os.path.exists(SPIN_SOCKET):
+            os.remove(SPIN_SOCKET)
+        self.spin_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.spin_socket.setblocking(0)
+        self.spin_socket.bind(SPIN_SOCKET)
+        self.spin_timer = QtCore.QTimer()
+        self.spin_timer.timeout.connect(self.socket_listen)
+        self.spin_timer.start(105)
+        # Listen for ACPI events
         self.acpi_queue = Queue()
-        self.acpi_timer = QTimer()
+        self.acpi_timer = QtCore.QTimer()
         self.acpi_timer.timeout.connect(self.acpi_listen)
         self.acpi_timer.start(110)
-        self.display_position_control_switch(status = "on")
-        # Listen for commands from the UI
-        if os.path.exists(self.UI_SOCKET):
-            os.remove(self.UI_SOCKET)
-        self.ui_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        self.ui_socket.setblocking(0)
-        self.ui_socket.bind(self.UI_SOCKET)
-        self.ui_timer = QTimer()
-        self.acpi_timer.timeout.connect(self.ui_listen)
-        self.acpi_timer.start(105)
-        if options["--gui"]:
-            # create buttons
-            buttonsList = []
-            # button: tablet mode
-            buttonModeTablet = QtGui.QPushButton(
-                "tablet mode",
-                self
-            )
-            buttonModeTablet.clicked.connect(
-                lambda: self.engage_mode(mode = "tablet")
-            )
-            buttonsList.append(buttonModeTablet)
-            # button: laptop mode
-            buttonModeLaptop = QtGui.QPushButton(
-                "laptop mode",
-                self
-            )
-            buttonModeLaptop.clicked.connect(
-                lambda: self.engage_mode(mode = "laptop")
-            )
-            buttonsList.append(buttonModeLaptop)
-            # button: left
-            buttonLeft = QtGui.QPushButton(
-                "left",
-                self
-            )
-            buttonLeft.clicked.connect(
-                lambda: self.engage_mode(mode = "left")
-            )
-            buttonsList.append(buttonLeft)
-            # button: right
-            buttonRight = QtGui.QPushButton(
-                "right", self
-            )
-            buttonRight.clicked.connect(
-                lambda: self.engage_mode(mode = "right")
-            )
-            buttonsList.append(buttonRight)
-            # button: inverted
-            buttonInverted = QtGui.QPushButton(
-                "inverted",
-                self
-            )
-            buttonInverted.clicked.connect(
-                lambda: self.engage_mode(mode = "inverted")
-            )
-            buttonsList.append(buttonInverted)
-            # button: normal
-            buttonNormal = QtGui.QPushButton(
-                "normal",
-                self
-            )
-            buttonNormal.clicked.connect(
-                lambda: self.engage_mode(mode = "normal")
-            )
-            buttonsList.append(buttonNormal)
-            # button: touchscreen on
-            buttonTouchscreenOn = QtGui.QPushButton(
-                "touchscreen on",
-                self
-            )
-            buttonTouchscreenOn.clicked.connect(
-                lambda: self.touchscreen_switch(status = "on")
-            )
-            buttonsList.append(buttonTouchscreenOn)
-            # button: touchscreen off
-            buttonTouchscreenOff = QtGui.QPushButton(
-                "touchscreen off",
-                self
-            )
-            buttonTouchscreenOff.clicked.connect(
-                lambda: self.touchscreen_switch(status = "off")
-            )
-            buttonsList.append(buttonTouchscreenOff)
-            # button: touchpad on
-            buttonTouchpadOn = QtGui.QPushButton(
-                "touchpad on",
-                self
-            )
-            buttonTouchpadOn.clicked.connect(
-                lambda: self.touchpad_switch(status = "on")
-            )
-            buttonsList.append(buttonTouchpadOn)
-            # button: touchpad off
-            buttonTouchpadOff = QtGui.QPushButton(
-                "touchpad off",
-                self
-            )
-            buttonTouchpadOff.clicked.connect(
-                lambda: self.touchpad_switch(status = "off")
-            )
-            buttonsList.append(buttonTouchpadOff)
-            # button: nipple on
-            buttonNippleOn = QtGui.QPushButton(
-                "nipple on",
-                self
-            )
-            buttonNippleOn.clicked.connect(
-                lambda: self.nipple_switch(status = "on")
-            )
-            buttonsList.append(buttonNippleOn)
-            # button: nipple off
-            buttonNippleOff = QtGui.QPushButton(
-                "nipple off",
-                self
-            )
-            buttonNippleOff.clicked.connect(
-                lambda: self.nipple_switch(status = "off")
-            )
-            buttonsList.append(buttonNippleOff)
-            # button: stylus proximity monitoring on
-            buttonStylusProximityControlOn = QtGui.QPushButton(
-                "stylus proximity monitoring on",
-                self
-            )
-            buttonStylusProximityControlOn.clicked.connect(
-                lambda: self.stylus_proximity_control_switch(status = "on")
-            )
-            buttonsList.append(buttonStylusProximityControlOn)
-            # button: stylus proximity monitoring off
-            buttonStylusProximityControlOff = QtGui.QPushButton(
-                "stylus proximity monitoring off",
-                self
-            )
-            buttonStylusProximityControlOff.clicked.connect(
-                lambda: self.stylus_proximity_control_switch(status = "off")
-            )
-            buttonsList.append(buttonStylusProximityControlOff)
-            # button: acceleration monitoring on
-            buttonAccelerationControlOn = QtGui.QPushButton(
-                "acceleration monitoring on",
-                self
-            )
-            buttonAccelerationControlOn.clicked.connect(
-                lambda: self.acceleration_control_switch(status = "on")
-            )
-            buttonsList.append(buttonAccelerationControlOn)
-            # button: acceleration monitoring off
-            buttonAccelerationControlOff = QtGui.QPushButton(
-                "acceleration monitoring off",
-                self
-            )
-            buttonAccelerationControlOff.clicked.connect(
-                lambda: self.acceleration_control_switch(status = "off")
-            )
-            buttonsList.append(buttonAccelerationControlOff)
-            # button: display position monitoring on
-            buttondisplay_position_controlOn = QtGui.QPushButton(
-                "display position monitoring on",
-                self
-            )
-            buttondisplay_position_controlOn.clicked.connect(
-                lambda: self.display_position_control_switch(status = "on")
-            )
-            buttonsList.append(buttondisplay_position_controlOn)
-            # button: display position monitoring off
-            buttondisplay_position_controlOff = QtGui.QPushButton(
-                "display position monitoring off",
-                self
-            )
-            buttondisplay_position_controlOff.clicked.connect(
-                lambda: self.display_position_control_switch(status = "off")
-            )
-            buttonsList.append(buttondisplay_position_controlOff)
-            # set button dimensions
-            buttonsWidth  = 240
-            buttonsHeight = 30
-            for button in buttonsList:
-                button.setFixedSize(buttonsWidth, buttonsHeight)
-                button.setStyleSheet(
-                    """
-                    color: #000000;
-                    background-color: #ffffff;
-                    border: 1px solid #000000;
-                    font-size: 10pt;
-                    text-align: left;
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    """
-                )
-            # set layout
-            vbox = QtGui.QVBoxLayout()
-            vbox.addStretch(1)
-            for button in buttonsList:
-                vbox.addWidget(button)
-                vbox.addStretch(1)	
-            self.setLayout(vbox)
-            # window
-            self.setWindowTitle("spin")
-            # set window position
-            self.move(0, 0)
-            self.show()
-        elif not options["--gui"]:
-            log.info("non-GUI mode")
+        self.acpi_control_switch("on")
+
 
     def signal_handler(self, signal, frame):
-        print('You pressed Ctrl+C!')
+        log.info('You pressed Ctrl+C!')
         self.close_event('bla')
         sys.exit(0)
 
 
     def close_event(self, event):
         log.info("terminate {name}".format(name = name))
+        if self.mode == "tablet":
+            self.engage_mode("laptop")
         self.stylus_proximity_control_switch(status = "off")
-        self.display_position_control_switch(status = "off")
         self.acceleration_control_switch(status = "off")
+        self.acpi_control_switch(status = "off")
         try:
-            os.remove(self.UI_SOCKET)
+            os.remove(SPIN_SOCKET)
         except:
             pass
-        self.deleteLater() 
+
 
     def display_orientation(
         self,
@@ -445,40 +260,7 @@ class interface(QtGui.QWidget):
         else:
             log.debug("touchscreen status unchanged")
 
-    def touchpad_orientation(
-        self,
-        orientation = None
-        ):
-        if "touchpad" in self.deviceNames:
-            coordinateTransformationMatrix = {
-                "left":     "0 -1 1 1 0 0 0 0 1",
-                "right":    "0 1 0 -1 0 1 0 0 1",
-                "inverted": "-1 0 1 0 -1 1 0 0 1",
-                "normal":   "1 0 0 0 1 0 0 0 1"
-            }
-            if coordinateTransformationMatrix.has_key(orientation):
-                log.info("change touchpad to {orientation}".format(
-                    orientation = orientation
-                ))
-                engage_command(
-                    "xinput set-prop \"{deviceName}\" \"Coordinate "
-                    "Transformation Matrix\" "
-                    "{matrix}".format(
-                        deviceName = self.deviceNames["touchpad"],
-                        matrix = coordinateTransformationMatrix[orientation]
-                    )
-                )
-            else:
-                log.error(
-                    "unknown touchpad orientation \"{orientation}\""
-                    " requested".format(
-                        orientation = orientation
-                    )
-                )
-                sys.exit()
-        else:
-            log.debug("touchpad orientation unchanged")
-
+    
     def touchpad_switch(
         self,
         status = None
@@ -509,6 +291,7 @@ class interface(QtGui.QWidget):
                 sys.exit()
         else:
             log.debug("touchpad status unchanged")
+
 
     def nipple_switch(
         self,
@@ -541,6 +324,7 @@ class interface(QtGui.QWidget):
         else:
             log.debug("nipple status unchanged")
 
+
     def stylus_proximity_control(
         self
         ):
@@ -567,6 +351,7 @@ class interface(QtGui.QWidget):
             self.previousStylusProximityStatus = self.stylusProximityStatus
             time.sleep(0.15)
 
+
     def stylus_proximity_control_switch(
         self,
         status = None
@@ -590,11 +375,22 @@ class interface(QtGui.QWidget):
             sys.exit()
 
 
-    def ui_listen(self):
+    def acpi_listen(self):
+        if self.acpi_queue.empty():
+            return
+        mode = self.acpi_queue.get()
+        if mode == "rotation_lock":
+            self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
+            self.engage_mode('togglelock')
+        else:
+            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
+
+
+    def socket_listen(self):
         try:
-            orientation = self.ui_socket.recv(1024)
-            if orientation:
-                self.engage_mode(orientation)
+            command = self.spin_socket.recv(1024)
+            if command:
+                self.engage_mode(command)
         except:
             pass
 
@@ -603,7 +399,8 @@ class interface(QtGui.QWidget):
         if self.accelQueue.empty():
             return
         orientation = self.accelQueue.get()
-        self.engage_mode(orientation)
+        if not self.locked:
+            self.engage_mode(orientation)
 
 
     def acceleration_control_switch(
@@ -622,7 +419,8 @@ class interface(QtGui.QWidget):
             log.info("change acceleration control to off")
             # TODO! Check if process exists, before terminating it.
             if hasattr(self, 'processAccelerationControl'):
-                self.processAccelerationControl.terminate()
+                pass
+            #self.processAccelerationControl.terminate()
             self.accelerometerStatus = "off"
         else:
             log.error(
@@ -633,89 +431,61 @@ class interface(QtGui.QWidget):
             )
             sys.exit()
 
-
-    def acpi_listen(self):
-        if self.acpi_queue.empty():
-            return
-        mode = self.acpi_queue.get()
-        if mode == "rotation_lock":
-            self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
-            os.system('/home/ragnar/Code/spin/spin_ui.py')
-            #if self.accelerometerStatus == "on":
-            #    self.accelerometerStatus = "off"
-            #else:
-            #    self.accelerometerStatus = "on"
-            #self.acceleration_control_switch(status = self.accelerometerStatus)
-        elif mode == "display_position_change":
-            if self.displayPositionStatus == "laptop":
-                self.displayPositionStatus = "tablet"
-            else:
-                self.displayPositionStatus = "laptop"
-            self.engage_mode(self.displayPositionStatus)
-        else:
-            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
-
-
-    def display_position_control_switch(
-        self,
-        status = None
-        ):
+    def acpi_control_switch(self, status = None):
         if status == "on":
-            log.info("change display position control to on")
-            self.processdisplay_position_control = Process(
+            log.info("change acpi control to on")
+            self.acpi_process = Process(
                 target = acpi_sensor,
                 args = (self.acpi_queue,)
             )
-            self.processdisplay_position_control.start()
+            self.acpi_process.start()
         elif status == "off":
-            log.info("change display position control to off")
+            log.info("change acpi control to off")
             try:
-                self.processdisplay_position_control.terminate()
+                self.acpi_process.terminate()
             except:
                 pass
         else:
             log.error(
-                "unknown display position control status \"{orientation}\" "
-                "requested".format(
-                    status = status
-                )
+                "unknown acpi control status \"{status}\" requested".format(status = status)
             )
             sys.exit()
 
-    def engage_mode(
-        self,
-        mode = None
-        ):
-        log.info("engage mode {mode}".format(
-            mode = mode
-        ))
+    
+    def engage_mode(self, mode = None):
+        log.info("engage mode {mode}".format(mode = mode))
+        if mode == "toggle":
+            if self.mode == "laptop":
+                mode = "tablet"
+            else:
+                mode = "laptop"
+            self.mode = mode
         if mode == "tablet":
             print(" *** TABLET ***")
-            try:
-                conf_dir = os.getenv('XDG_CONFIG_HOME', "{home}/.config/".format(home = os.environ['HOME']))
-                settings_path = os.path.join(conf_dir, 'spin')
-                settings = open(settings_path, 'r')
-                orientation = settings.readline().rstrip('\n')
-                settings.close()
-            except IOError:
-                log.info("unable to read default orientation from file")
-                orientation = "normal"
-            self.nipple_switch(status                = "off") 
-            self.touchpad_switch(status              = "off")
-            #self.acceleration_control_switch(status  = "off")
-            self.display_orientation(orientation     = orientation)
-            self.touchscreen_orientation(orientation = orientation)
+            self.nipple_switch(status = "off") 
+            self.touchpad_switch(status = "off")
+            self.locked = False
+            os.system('notify-send "Tablet Mode"')
         elif mode == "laptop":
             print(" *** LAPTOP ***")
-            #self.acceleration_control_switch(status  = "off")
-            self.touchpad_switch(status              = "on")
-            self.nipple_switch(status                = "on")
-            self.display_orientation(orientation     = "normal")
+            self.locked = True
+            self.touchpad_switch(status = "on")
+            self.nipple_switch(status = "on")
+            self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
+            os.system('notify-send "Laptop Mode"')
         elif mode in ["left", "right", "inverted", "normal"]:
-            self.display_orientation(orientation     = mode)
+            self.display_orientation(orientation = mode)
             self.touchscreen_orientation(orientation = mode)
-            self.acceleration_control_switch(status  = "off")
+        elif mode == "togglelock":
+            if self.locked is True:
+                self.locked = False
+                log.info("Rotation lock disabled")
+                os.system('notify-send "Rotation Lock Disabled"')
+            else:
+                self.locked = True
+                log.info("Rotation lock enabled")
+                os.system('notify-send "Rotation Lock Enabled"')
         else:
             log.error(
                 "unknown mode \"{mode}\" requested".format(
@@ -727,7 +497,7 @@ class interface(QtGui.QWidget):
 
 
     def is_touchscreen_alive(self):
-        ''' Check if the touchscreen is alive '''
+        ''' Check if the touchscreen is responding '''
         log.info("waiting for touchscreen to respond")
         status = os.system('xinput list | grep -q "{touchscreen}"'.format(touchscreen = self.deviceNames["touchscreen"]))
         if status == 0:
@@ -779,9 +549,7 @@ def engage_command(
     else:
         os.system(command)
 
-def mean_list(
-    lists = None
-    ):
+def mean_list(lists = None):
     return([sum(element)/len(element) for element in zip(*lists)])
 
 def acceleration_sensor(accelQueue, old_orientation="normal"):
@@ -838,6 +606,7 @@ def acpi_sensor(acpi_queue):
         time.sleep(0.1)
     socketACPI.close()
 
+
 class AccelerationVector(list):
 
     def __init__(self):
@@ -882,6 +651,20 @@ class AccelerationVector(list):
         self.update()
         return(list.__repr__(self))
 
+
+def send_command(command):
+    if os.path.exists(SPIN_SOCKET):
+        command_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        try:
+            command_socket.connect(SPIN_SOCKET)
+            command_socket.send(command)
+            log.info("Connected to socket")
+        except:
+            log.info("Failed to send mode change to the spin daemon")
+    else:
+        log.error("Socket does not exist. Is the spin deamon running.")
+
+
 def main(options):
 
     # logging
@@ -892,9 +675,21 @@ def main(options):
     logHandler.setFormatter(logging.Formatter("%(message)s"))
     log.level  = logging.INFO
 
-    application = QtGui.QApplication(sys.argv)
-    interface1  = interface(options)
-    sys.exit(application.exec_())
+    # TODO! Option parser acceps half options, like --sett.  Replace it.
+    if options["--mode"]:
+        log.info("Toggle between tablet and laptop mode")
+        send_command("toggle")
+    elif options["--rotation-lock"]:
+        log.info("Toggle the rotation lock on/off")
+        send_command("togglelock")
+    elif options["--daemon"]:
+        log.info("Starting Yoga Spin background daemon")
+        app = QtCore.QCoreApplication(sys.argv)
+        daemon = Daemon(options)
+        sys.exit(app.exec_())
+    else:
+        log.info("No options passed. Doing nothing")
+        pass
 
 if __name__ == "__main__":
     options = docopt.docopt(__doc__)

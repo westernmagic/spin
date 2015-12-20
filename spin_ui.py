@@ -9,7 +9,7 @@ from PyQt4 import QtCore
 
 class SpinUI(QtGui.QWidget):
 
-    UI_SOCKET = "/tmp/.spin_ui"
+    UI_SOCKET = "/tmp/yoga_spin.socket"
 
     def __init__(self):
         super(SpinUI, self).__init__()
