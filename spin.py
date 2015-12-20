@@ -101,7 +101,7 @@ from numpy.linalg import norm
 SPIN_SOCKET = "/tmp/yoga_spin.socket"
 CONF_FILE = "{home}/.config/yoga_spin".format(home = os.environ['HOME'])
 
-# TODO! Remove this. Package is included in Ubuntu 15.10
+# TODO! Remove this. Package is included in Ubuntu 15.10...or replace with other
 docopt = smuggle(
     moduleName = "docopt",
     URL = "https://rawgit.com/docopt/docopt/master/docopt.py"
@@ -190,7 +190,6 @@ class SettingsUI(QtGui.QWidget):
             o_buttons.append(button)
             if ori == self.orientation:
                 button.setChecked(True)
-        #o_buttons[0].setChecked(True)
         main_layout.addWidget(o_box)
 
         self.show()
@@ -219,14 +218,13 @@ class Daemon(QtCore.QObject):
             log.info("device names: {deviceNames}".format(
                 deviceNames = self.deviceNames
             ))
-        # get default settings
+        # Get default settings
         self.settings = Settings()
-        # engage stylus proximity control
+        # Engage stylus proximity control
         self.stylus_proximity_control_switch(status = "on")
-        # engage acceleration control
-        self.orientation = "normal"
-        # engage display position control
+        # Set default laptop mode
         self.mode = "laptop"
+        self.orientation = "normal"
         self.locked = True
         # Start a queue for reading screen rotation from the accelerometer
         self.accelerometerStatus = "on"
@@ -235,13 +233,7 @@ class Daemon(QtCore.QObject):
         self.accelTimer.timeout.connect(self.acceleration_listen)
         self.accelTimer.start(100)
         self.acceleration_control_switch(status = "on")
-        # Start a queue for reading display position
-        #self.acpi_queue = Queue()
-        #self.acpi_timer = QtCore.QTimer()
-        #self.acpi_timer.timeout.connect(self.acpi_listen)
-        #self.acpi_timer.start(110)
-        #self.display_position_control_switch(status = "on")
-        # Listen for commands through socket
+        # Listen for commands through a socket
         if os.path.exists(SPIN_SOCKET):
             os.remove(SPIN_SOCKET)
         self.spin_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
@@ -252,7 +244,7 @@ class Daemon(QtCore.QObject):
         self.spin_timer.start(105)
 
     def signal_handler(self, signal, frame):
-        print('You pressed Ctrl+C!')
+        log.info('You pressed Ctrl+C!')
         self.close_event('bla')
         sys.exit(0)
 
@@ -260,7 +252,6 @@ class Daemon(QtCore.QObject):
     def close_event(self, event):
         log.info("terminate {name}".format(name = name))
         self.stylus_proximity_control_switch(status = "off")
-        #self.display_position_control_switch(status = "off")
         self.acceleration_control_switch(status = "off")
         try:
             os.remove(SPIN_SOCKET)
@@ -487,7 +478,6 @@ class Daemon(QtCore.QObject):
 
 
     def acceleration_listen(self):
-        # TODO! Respect rotation lock
         if self.accelQueue.empty():
             return
         orientation = self.accelQueue.get()
@@ -523,58 +513,6 @@ class Daemon(QtCore.QObject):
             )
             sys.exit()
 
-
-    '''
-    def acpi_listen(self):
-        if self.acpi_queue.empty():
-            return
-        mode = self.acpi_queue.get()
-        if mode == "rotation_lock":
-            self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
-            os.system('/home/ragnar/Code/spin/spin_ui.py')
-            #if self.accelerometerStatus == "on":
-            #    self.accelerometerStatus = "off"
-            #else:
-            #    self.accelerometerStatus = "on"
-            #self.acceleration_control_switch(status = self.accelerometerStatus)
-        elif mode == "display_position_change":
-            if self.displayPositionStatus == "laptop":
-                self.displayPositionStatus = "tablet"
-            else:
-                self.displayPositionStatus = "laptop"
-            self.engage_mode(self.displayPositionStatus)
-        else:
-            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
-    '''
-
-
-    '''
-    def display_position_control_switch(
-        self,
-        status = None
-        ):
-        if status == "on":
-            log.info("change display position control to on")
-            self.processdisplay_position_control = Process(
-                target = acpi_sensor,
-                args = (self.acpi_queue,)
-            )
-            self.processdisplay_position_control.start()
-        elif status == "off":
-            log.info("change display position control to off")
-            try:
-                self.processdisplay_position_control.terminate()
-            except:
-                pass
-        else:
-            log.error(
-                "unknown display position control status \"{orientation}\" "
-                "requested".format(
-                    status = status
-                )
-            )
-            sys.exit()
-    '''
     
     def engage_mode(self, mode = None):
         log.info("engage mode {mode}".format(mode = mode))
@@ -626,7 +564,7 @@ class Daemon(QtCore.QObject):
 
 
     def is_touchscreen_alive(self):
-        ''' Check if the touchscreen is alive '''
+        ''' Check if the touchscreen is responding '''
         log.info("waiting for touchscreen to respond")
         status = os.system('xinput list | grep -q "{touchscreen}"'.format(touchscreen = self.deviceNames["touchscreen"]))
         if status == 0:
@@ -678,9 +616,7 @@ def engage_command(
     else:
         os.system(command)
 
-def mean_list(
-    lists = None
-    ):
+def mean_list(lists = None):
     return([sum(element)/len(element) for element in zip(*lists)])
 
 def acceleration_sensor(accelQueue, old_orientation="normal"):
@@ -712,32 +648,6 @@ def acceleration_sensor(accelQueue, old_orientation="normal"):
             old_orientation = orientation
             accelQueue.put(orientation)
         time.sleep(0.15)
-
-
-'''
-def acpi_sensor(acpi_queue):
-    socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    socketACPI.connect("/var/run/acpid.socket")
-    while True:
-        eventACPI = socketACPI.recv(4096)
-        print("ACPI EVENT: {0}".format(eventACPI))
-        # Ubuntu 13.10 compatibility:
-        #eventACPIDisplayPositionChange = \
-        #    "ibm/hotkey HKEY 00000080 000060c0\n"
-        # Ubuntu 14.04-15.10 compatibility:
-        eventACPIDisplayPositionChange = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
-        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
-        if eventACPI == eventACPIRotationLock:
-            acpi_queue.put("rotation_lock")
-        elif eventACPI == eventACPIDisplayPositionChange:
-            log.info("display position change")
-            acpi_queue.put("display_position_change")
-        else:
-            log.info("unknown acpi event triggered: {0}".format(eventACPI))
-            acpi_queue.put("unknown")
-        time.sleep(0.1)
-    socketACPI.close()
-'''
 
 
 class AccelerationVector(list):
@@ -784,6 +694,7 @@ class AccelerationVector(list):
         self.update()
         return(list.__repr__(self))
 
+
 def send_command(command):
     if os.path.exists(SPIN_SOCKET):
         command_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
@@ -807,8 +718,6 @@ def main(options):
     logHandler.setFormatter(logging.Formatter("%(message)s"))
     log.level  = logging.INFO
 
-    #application = QtGui.QApplication(sys.argv)
-    #option_parser  = Yoga(options)
     # TODO! Option parser acceps half options, like --sett.  Replace it.
     if options["--settings"]:
         log.info("Opening the settings dialog")
