@@ -139,6 +139,13 @@ class Daemon(QtCore.QObject):
         self.spin_timer = QtCore.QTimer()
         self.spin_timer.timeout.connect(self.socket_listen)
         self.spin_timer.start(105)
+        # Listen for ACPI events
+        self.acpi_queue = Queue()
+        self.acpi_timer = QtCore.QTimer()
+        self.acpi_timer.timeout.connect(self.acpi_listen)
+        self.acpi_timer.start(110)
+        self.acpi_control_switch("on")
+
 
     def signal_handler(self, signal, frame):
         log.info('You pressed Ctrl+C!')
@@ -152,6 +159,7 @@ class Daemon(QtCore.QObject):
             self.engage_mode("laptop")
         self.stylus_proximity_control_switch(status = "off")
         self.acceleration_control_switch(status = "off")
+        self.acpi_control_switch(status = "off")
         try:
             os.remove(SPIN_SOCKET)
         except:
@@ -367,6 +375,17 @@ class Daemon(QtCore.QObject):
             sys.exit()
 
 
+    def acpi_listen(self):
+        if self.acpi_queue.empty():
+            return
+        mode = self.acpi_queue.get()
+        if mode == "rotation_lock":
+            self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
+            self.engage_mode('togglelock')
+        else:
+            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
+
+
     def socket_listen(self):
         try:
             command = self.spin_socket.recv(1024)
@@ -409,6 +428,26 @@ class Daemon(QtCore.QObject):
                 "requested".format(
                     status = status
                 )
+            )
+            sys.exit()
+
+    def acpi_control_switch(self, status = None):
+        if status == "on":
+            log.info("change acpi control to on")
+            self.acpi_process = Process(
+                target = acpi_sensor,
+                args = (self.acpi_queue,)
+            )
+            self.acpi_process.start()
+        elif status == "off":
+            log.info("change acpi control to off")
+            try:
+                self.acpi_process.terminate()
+            except:
+                pass
+        else:
+            log.error(
+                "unknown acpi control status \"{status}\" requested".format(status = status)
             )
             sys.exit()
 
@@ -542,6 +581,30 @@ def acceleration_sensor(accelQueue, old_orientation="normal"):
             old_orientation = orientation
             accelQueue.put(orientation)
         time.sleep(0.15)
+
+
+def acpi_sensor(acpi_queue):
+    socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    socketACPI.connect("/var/run/acpid.socket")
+    while True:
+        eventACPI = socketACPI.recv(4096)
+        print("ACPI EVENT: {0}".format(eventACPI))
+        # Ubuntu 13.10 compatibility:
+        #eventACPIDisplayPositionChange = \
+        #    "ibm/hotkey HKEY 00000080 000060c0\n"
+        # Ubuntu 14.04-15.10 compatibility:
+        eventACPIDisplayPositionChange = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
+        eventACPIRotationLock = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        if eventACPI == eventACPIRotationLock:
+            acpi_queue.put("rotation_lock")
+        elif eventACPI == eventACPIDisplayPositionChange:
+            log.info("display position change")
+            acpi_queue.put("display_position_change")
+        else:
+            log.info("unknown acpi event triggered: {0}".format(eventACPI))
+            acpi_queue.put("unknown")
+        time.sleep(0.1)
+    socketACPI.close()
 
 
 class AccelerationVector(list):
