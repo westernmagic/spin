@@ -92,11 +92,14 @@ import time
 import logging
 from   PyQt4 import QtGui
 from   PyQt4 import QtCore
+from functools import partial
 from multiprocessing import Process, Queue
 from numpy import (array, dot)
 from numpy.linalg import norm
 
 SPIN_SOCKET = "/tmp/yoga_spin.socket"
+CONF_FILE = os.getenv("{home}/.config/yoga_spin".format(home = os.environ['HOME']))
+
 
 # TODO! Remove this. Package is included in Ubuntu 15.10
 docopt = smuggle(
@@ -111,13 +114,50 @@ class Settings(QtGui.QWidget):
         log.info("initiate {name}".format(name = name))
         # Capture SIGINT
         signal.signal(signal.SIGINT, self.signal_handler)
-        # TODO!
+        # Build the dialog
         log.info("Build a settings dialog")
+        self.open_settings()
+
+    def open_settings(self):
+        self.move(QtGui.QApplication.desktop().screen().rect().center()- self.rect().center())
+        self.setWindowTitle('Tablet Mode Settings')
+        main_layout = QtGui.QVBoxLayout(self)
+
+        self.rotation_lock = QtGui.QCheckBox('Rotation Lock')
+        self.rotation_lock.stateChanged.connect( partial( self.rotation_lock_change, self.rotation_lock) )
+        self.rotation_lock.setToolTip("Set the default rotation lock status in Tablet mode")
+        main_layout.addWidget(self.rotation_lock)
+
+        o_group = QtGui.QGroupBox("Screen Orientation")
+        o_layout = QtGui.QVBoxLayout()
+        self.o_group = QtGui.QButtonGroup()
+        self.o_buttons = []
+        for ori in ['normal', 'inverted', 'left', 'right']:
+            button = QtGui.QRadioButton(ori)
+            button.clicked.connect( partial( self.orientation_change, button) )
+            self.o_group.addButton(button)
+            o_layout.addWidget(button)
+            self.o_buttons.append(button)
+        self.o_buttons[0].setChecked(True)
+        o_group.setLayout(o_layout)
+        o_group.setToolTip("Set the default screen orienation when in Tablet mode")
+        main_layout.addWidget(o_group)
+
+        self.show()
+
+    def orientation_change(self, orientation):
+        print(orientation)
+
+    def rotation_lock_change(self, checkbox):
+        print("Rotation lock changed")
+        print(type(checkbox))
+        print(checkbox.isChecked())
 
     def signal_handler(self, signal, frame):
         log.info('You pressed Ctrl+C!')
         #self.close_event('bla')
         sys.exit(0)
+
 
 class Daemon(QtCore.QObject):
 
