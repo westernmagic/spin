@@ -122,14 +122,14 @@ class Daemon(QtCore.QObject):
         self.orientation = "normal"
         self.locked = True
         # Engage stylus proximity control
-        self.stylus_proximity_control_switch(status = "on")
+        self.stylus_proximity_control_switch(status = True)
         # Start a queue for reading screen rotation from the accelerometer
-        self.accelerometerStatus = "on"
+        self.accelerometerStatus = True
         self.accelQueue = Queue()
         self.accelTimer = QtCore.QTimer()
         self.accelTimer.timeout.connect(self.acceleration_listen)
         self.accelTimer.start(100)
-        self.acceleration_control_switch(status = "on")
+        self.acceleration_control_switch(status = True)
         # Listen for commands through a socket
         if os.path.exists(SPIN_SOCKET):
             os.remove(SPIN_SOCKET)
@@ -144,7 +144,7 @@ class Daemon(QtCore.QObject):
         self.acpi_timer = QtCore.QTimer()
         self.acpi_timer.timeout.connect(self.acpi_listen)
         self.acpi_timer.start(110)
-        self.acpi_control_switch("on")
+        self.acpi_control_switch(True)
 
 
     def signal_handler(self, signal, frame):
@@ -157,9 +157,9 @@ class Daemon(QtCore.QObject):
         log.info("terminate {name}".format(name = name))
         if self.mode == "tablet":
             self.engage_mode("laptop")
-        self.stylus_proximity_control_switch(status = "off")
-        self.acceleration_control_switch(status = "off")
-        self.acpi_control_switch(status = "off")
+        self.stylus_proximity_control_switch(status = False)
+        self.acceleration_control_switch(status = False)
+        self.acpi_control_switch(status = False)
         try:
             os.remove(SPIN_SOCKET)
         except:
@@ -233,8 +233,8 @@ class Daemon(QtCore.QObject):
         ):
         if "touchscreen" in self.deviceNames:
             xinputStatus = {
-                "on":  "enable",
-                "off": "disable"
+                True:  "enable",
+                False: "disable"
             }
             while not self.is_touchscreen_alive():
                 time.sleep(0.5)
@@ -267,8 +267,8 @@ class Daemon(QtCore.QObject):
         ):
         if "touchpad" in self.deviceNames:
             xinputStatus = {
-                "on":  "enable",
-                "off": "disable"
+                True:  "enable",
+                False: "disable"
             }
             if xinputStatus.has_key(status):
                 log.info("change touchpad to {status}".format(
@@ -299,8 +299,8 @@ class Daemon(QtCore.QObject):
         ):
         if "nipple" in self.deviceNames:
             xinputStatus = {
-                "on":  "enable",
-                "off": "disable"
+                True:  "enable",
+                False: "disable"
             }
             if xinputStatus.has_key(status):
                 log.info("change nipple to {status}".format(
@@ -342,12 +342,12 @@ class Daemon(QtCore.QObject):
                 (self.stylusProximityStatus == "out") and \
                 (self.previousStylusProximityStatus != "out"):
                 log.info("stylus inactive")
-                self.touchscreen_switch(status = "on")
+                self.touchscreen_switch(status = True)
             elif \
                 (self.stylusProximityStatus == "in") and \
                 (self.previousStylusProximityStatus != "in"):
                 log.info("stylus active")
-                self.touchscreen_switch(status = "off")
+                self.touchscreen_switch(status = False)
             self.previousStylusProximityStatus = self.stylusProximityStatus
             time.sleep(0.15)
 
@@ -356,13 +356,13 @@ class Daemon(QtCore.QObject):
         self,
         status = None
         ):
-        if status == "on":
+        if status == True:
             log.info("change stylus proximity control to on")
             self.processStylusProximityControl = Process(
                 target = self.stylus_proximity_control
             )
             self.processStylusProximityControl.start()
-        elif status == "off":
+        elif status == False:
             log.info("change stylus proximity control to off")
             self.processStylusProximityControl.terminate()
         else:
@@ -407,21 +407,21 @@ class Daemon(QtCore.QObject):
         self,
         status = None
         ):
-        if status == "on":
+        if status == True:
             log.info("change acceleration control to on")
             self.processAccelerationControl = Process(
                 target = acceleration_sensor,
                 args = (self.accelQueue, self.orientation)
             )
             self.processAccelerationControl.start()
-            self.accelerometerStatus = "on"
-        elif status == "off":
+            self.accelerometerStatus = True
+        elif status == False:
             log.info("change acceleration control to off")
             # TODO! Check if process exists, before terminating it.
             if hasattr(self, 'processAccelerationControl'):
                 pass
             #self.processAccelerationControl.terminate()
-            self.accelerometerStatus = "off"
+            self.accelerometerStatus = False
         else:
             log.error(
                 "unknown acceleration control status \"{status}\" "
@@ -432,14 +432,14 @@ class Daemon(QtCore.QObject):
             sys.exit()
 
     def acpi_control_switch(self, status = None):
-        if status == "on":
+        if status == True:
             log.info("change acpi control to on")
             self.acpi_process = Process(
                 target = acpi_sensor,
                 args = (self.acpi_queue,)
             )
             self.acpi_process.start()
-        elif status == "off":
+        elif status == False:
             log.info("change acpi control to off")
             try:
                 self.acpi_process.terminate()
@@ -462,15 +462,15 @@ class Daemon(QtCore.QObject):
             self.mode = mode
         if mode == "tablet":
             print(" *** TABLET ***")
-            self.nipple_switch(status = "off") 
-            self.touchpad_switch(status = "off")
+            self.nipple_switch(status = False) 
+            self.touchpad_switch(status = False)
             self.locked = False
             os.system('notify-send "Tablet Mode"')
         elif mode == "laptop":
             print(" *** LAPTOP ***")
             self.locked = True
-            self.touchpad_switch(status = "on")
-            self.nipple_switch(status = "on")
+            self.touchpad_switch(status = True)
+            self.nipple_switch(status = True)
             self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
             os.system('notify-send "Laptop Mode"')
