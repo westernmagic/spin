@@ -31,51 +31,11 @@
 # <http://www.gnu.org/licenses/>.                                              #
 #                                                                              #
 ################################################################################
-
-Usage:
-    spin.py [options]
-
-Options:
-    -h,--help                 display help message
-    --version                 display version and exit
-    --gui                     GUI mode for debugging
-    --debugpassive            display commands without executing
-    -m,--mode                 toggle between laptop and tablet/tent mode
-    -r,--rotation-lock        toggle rotation lock on/off
-    --daemon                  run in this mode in the background
 """
 
 name    = "spin"
 version = "2015-04-30T0256Z"
 
-import imp
-import urllib
-
-# TODO! Remove this, the module being smuggled in is available in Ubuntu 15.10
-def smuggle(
-    moduleName = None,
-    URL        = None
-    ):
-    if moduleName is None:
-        moduleName = URL
-    try:
-        module = __import__(moduleName)
-        return(module)
-    except:
-        try:
-            moduleString = urllib.urlopen(URL).read()
-            module = imp.new_module("module")
-            exec moduleString in module.__dict__
-            return(module)
-        except: 
-            raise(
-                Exception(
-                    "module {moduleName} import error".format(
-                        moduleName = moduleName
-                    )
-                )
-            )
-            sys.exit()
 
 import os
 import sys
@@ -85,6 +45,7 @@ import subprocess
 import socket
 import time
 import logging
+import argparse
 from   PyQt4 import QtCore
 from multiprocessing import Process, Queue
 from numpy import (array, dot)
@@ -92,15 +53,10 @@ from numpy.linalg import norm
 
 SPIN_SOCKET = '/tmp/yoga_spin.socket'
 
-# TODO! Remove this. Package is included in Ubuntu 15.10...or replace with other
-docopt = smuggle(
-    moduleName = "docopt",
-    URL = "https://rawgit.com/docopt/docopt/master/docopt.py"
-)
 
 class Daemon(QtCore.QObject):
 
-    def __init__(self, options = None):
+    def __init__(self):
         super(Daemon, self).__init__()
         # Capture SIGINT
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -109,14 +65,10 @@ class Daemon(QtCore.QObject):
             log.error("Only one instance of Yoga Spin Daemon can be run at a time")
             sys.exit()
         # Handle debug option
-        self.options = options
         log.info("initiate {name}".format(name = name))
         # Audit the inputs available.
         self.deviceNames = get_inputs()
-        if options["--debugpassive"] is True:
-            log.info("device names: {deviceNames}".format(
-                deviceNames = self.deviceNames
-            ))
+        log.info("device names: {deviceNames}".format(deviceNames = self.deviceNames))
         # Set default laptop mode
         self.mode = "laptop"
         self.orientation = "normal"
@@ -539,15 +491,8 @@ def get_inputs():
             ))
     return(deviceNames)
 
-def engage_command(
-    command = None
-    ):
-    if options["--debugpassive"] is True:
-        log.info("command: {command}".format(
-            command = command
-        ))
-    else:
-        os.system(command)
+def engage_command(command = None):
+    os.system(command)
 
 def mean_list(lists = None):
     return([sum(element)/len(element) for element in zip(*lists)])
@@ -561,7 +506,7 @@ def acceleration_sensor(accelQueue, old_orientation="normal"):
             time.sleep(0.25)
             measurements.append(AccelerationVector())
         stableAcceleration = mean_list(lists = measurements)
-        log.info("stable acceleration vector: {vector}".format(
+        log.debug("stable acceleration vector: {vector}".format(
             vector = stableAcceleration
         ))
         # Using numpy to compare rotation vectors.
@@ -665,35 +610,51 @@ def send_command(command):
         log.error("Socket does not exist. Is the spin deamon running.")
 
 
-def main(options):
+def main():
 
     # logging
+    # TODO! Logging level as argument
     global log
     log        = logging.getLogger()
     logHandler = logging.StreamHandler()
     log.addHandler(logHandler)
     logHandler.setFormatter(logging.Formatter("%(message)s"))
-    log.level  = logging.INFO
 
-    # TODO! Option parser acceps half options, like --sett.  Replace it.
-    if options["--mode"]:
-        log.info("Toggle between tablet and laptop mode")
-        send_command("toggle")
-    elif options["--rotation-lock"]:
-        log.info("Toggle the rotation lock on/off")
-        send_command("togglelock")
-    elif options["--daemon"]:
+    parser = argparse.ArgumentParser(description="Test")
+    parser.add_argument("-v", "--version",
+                        help="Print out the version number",
+                        action="store_true")
+    parser.add_argument("-d", "--daemon",
+                        help="Run in the background as a daemon",
+                        action="store_true")
+    parser.add_argument("-m", "--mode",
+                        help="Toggle between Tablet and Laptop mode",
+                        action="store_true")
+    parser.add_argument("-r", "--rotatelock",
+                        help="Toggle screen rotation locking",
+                        action="store_true")
+    parser.add_argument("-l", "--loglevel",
+                        help="Log level (1=debug, 2=info, 3=warning, 4=error, 5=critical)",
+                        type=int,
+                        default=4)
+    args = parser.parse_args()
+
+    log.level = args.loglevel * 10
+    if args.version:
+        print("TODO")
+    elif args.daemon:
         log.info("Starting Yoga Spin background daemon")
         app = QtCore.QCoreApplication(sys.argv)
-        daemon = Daemon(options)
+        daemon = Daemon()
         sys.exit(app.exec_())
+    elif args.mode:
+        log.info("Toggle between tablet and laptop mode")
+        send_command("toggle")
+    elif args.rotatelock:
+        log.info("Toggle the rotation lock on/off")
+        send_command("togglelock")
     else:
-        log.info("No options passed. Doing nothing")
-        pass
+        log.info("No arguments passed. Doing nothing.")
 
 if __name__ == "__main__":
-    options = docopt.docopt(__doc__)
-    if options["--version"]:
-        print(version)
-        exit()
-    main(options)
+    main()
