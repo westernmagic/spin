@@ -120,7 +120,9 @@ class Daemon(QtCore.QObject):
             log.info("Orienting display to {0}".format(orientation))
             engage_command("xrandr -o {0}".format(orientation))
             # TODO! Hack to reset calibration.
-            engage_command("xsetwacom --set 10 ResetArea")
+            engage_command("xsetwacom --set \"{stylus}\" ResetArea".format(
+                stylus = self.device_names["stylus"])
+            )
         else:
             log.error("Unknown display orientation \"{0}\" requested".format(orientation))
             sys.exit()
@@ -225,7 +227,7 @@ class Daemon(QtCore.QObject):
         self.previous_stylus_proximity = None
         while True:
             stylus_proximity_command = "xinput query-state " + \
-                                     "\"Wacom ISDv4 EC Pen stylus\" | " + \
+                                     "\""+self.device_names["stylus"]+"\" | " + \
                                      "grep Proximity | cut -d \" \" -f3 | " + \
                                      " cut -d \"=\" -f2"
             self.stylus_proximity = subprocess.check_output(
