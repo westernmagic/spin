@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Yoga Spin - Toggle Mode
+Exec=spin.py --mode
+Terminal=false
+Type=Application
+Icon=yoga-spin-mode

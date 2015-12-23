@@ -31,659 +31,360 @@
 # <http://www.gnu.org/licenses/>.                                              #
 #                                                                              #
 ################################################################################
-
-Usage:
-    spin.py [options]
-
-Options:
-    -h,--help        display help message
-    --version        display version and exit
-    --nogui          non-GUI mode
-    --debugpassive   display commands without executing
 """
 
 name    = "spin"
 version = "2015-04-30T0256Z"
 
-import imp
-import urllib
-
-def smuggle(
-    moduleName = None,
-    URL        = None
-    ):
-    if moduleName is None:
-        moduleName = URL
-    try:
-        module = __import__(moduleName)
-        return(module)
-    except:
-        try:
-            moduleString = urllib.urlopen(URL).read()
-            module = imp.new_module("module")
-            exec moduleString in module.__dict__
-            return(module)
-        except: 
-            raise(
-                Exception(
-                    "module {moduleName} import error".format(
-                        moduleName = moduleName
-                    )
-                )
-            )
-            sys.exit()
 
 import os
 import sys
+import signal
 import glob
 import subprocess
-import multiprocessing
 import socket
 import time
 import logging
-from   PyQt4 import QtGui
-docopt = smuggle(
-    moduleName = "docopt",
-    URL = "https://rawgit.com/docopt/docopt/master/docopt.py"
-)
+import argparse
+from   PyQt4 import QtCore
+from multiprocessing import Process, Queue
+from numpy import (array, dot)
+from numpy.linalg import norm
 
-class interface(QtGui.QWidget):
+SPIN_SOCKET = '/tmp/yoga_spin.socket'
 
-    def __init__(
-        self,
-        options = None
-        ):
-        self.options = options
-        super(interface, self).__init__()
-        log.info("initiate {name}".format(name = name))
+
+class Daemon(QtCore.QObject):
+
+    def __init__(self):
+        super(Daemon, self).__init__()
+        # Capture SIGINT
+        signal.signal(signal.SIGINT, self.signal_handler)
+        # Check if spin is running.
+        if os.path.exists(SPIN_SOCKET):
+            log.error("Only one instance of Yoga Spin Daemon can be run at a time")
+            sys.exit()
         # Audit the inputs available.
-        self.deviceNames = get_inputs()
-        if options["--debugpassive"] is True:
-            log.info("device names: {deviceNames}".format(
-                deviceNames = self.deviceNames
-            ))
-        # engage stylus proximity control
-        self.stylus_proximity_control_switch(status = "on")
-        # engage acceleration control
-        #self.acceleration_control_switch(status = "on")
-        # engage display position control
-        self.displayPositionStatus = "laptop"
-        self.display_position_control_switch(status = "on")
-        if not options["--nogui"]:
-            # create buttons
-            buttonsList = []
-            # button: tablet mode
-            buttonModeTablet = QtGui.QPushButton(
-                "tablet mode",
-                self
-            )
-            buttonModeTablet.clicked.connect(
-                lambda: self.engage_mode(mode = "tablet")
-            )
-            buttonsList.append(buttonModeTablet)
-            # button: laptop mode
-            buttonModeLaptop = QtGui.QPushButton(
-                "laptop mode",
-                self
-            )
-            buttonModeLaptop.clicked.connect(
-                lambda: self.engage_mode(mode = "laptop")
-            )
-            buttonsList.append(buttonModeLaptop)
-            # button: left
-            buttonLeft = QtGui.QPushButton(
-                "left",
-                self
-            )
-            buttonLeft.clicked.connect(
-                lambda: self.engage_mode(mode = "left")
-            )
-            buttonsList.append(buttonLeft)
-            # button: right
-            buttonRight = QtGui.QPushButton(
-                "right", self
-            )
-            buttonRight.clicked.connect(
-                lambda: self.engage_mode(mode = "right")
-            )
-            buttonsList.append(buttonRight)
-            # button: inverted
-            buttonInverted = QtGui.QPushButton(
-                "inverted",
-                self
-            )
-            buttonInverted.clicked.connect(
-                lambda: self.engage_mode(mode = "inverted")
-            )
-            buttonsList.append(buttonInverted)
-            # button: normal
-            buttonNormal = QtGui.QPushButton(
-                "normal",
-                self
-            )
-            buttonNormal.clicked.connect(
-                lambda: self.engage_mode(mode = "normal")
-            )
-            buttonsList.append(buttonNormal)
-            # button: touchscreen on
-            buttonTouchscreenOn = QtGui.QPushButton(
-                "touchscreen on",
-                self
-            )
-            buttonTouchscreenOn.clicked.connect(
-                lambda: self.touchscreen_switch(status = "on")
-            )
-            buttonsList.append(buttonTouchscreenOn)
-            # button: touchscreen off
-            buttonTouchscreenOff = QtGui.QPushButton(
-                "touchscreen off",
-                self
-            )
-            buttonTouchscreenOff.clicked.connect(
-                lambda: self.touchscreen_switch(status = "off")
-            )
-            buttonsList.append(buttonTouchscreenOff)
-            # button: touchpad on
-            buttonTouchpadOn = QtGui.QPushButton(
-                "touchpad on",
-                self
-            )
-            buttonTouchpadOn.clicked.connect(
-                lambda: self.touchpad_switch(status = "on")
-            )
-            buttonsList.append(buttonTouchpadOn)
-            # button: touchpad off
-            buttonTouchpadOff = QtGui.QPushButton(
-                "touchpad off",
-                self
-            )
-            buttonTouchpadOff.clicked.connect(
-                lambda: self.touchpad_switch(status = "off")
-            )
-            buttonsList.append(buttonTouchpadOff)
-            # button: nipple on
-            buttonNippleOn = QtGui.QPushButton(
-                "nipple on",
-                self
-            )
-            buttonNippleOn.clicked.connect(
-                lambda: self.nipple_switch(status = "on")
-            )
-            buttonsList.append(buttonNippleOn)
-            # button: nipple off
-            buttonNippleOff = QtGui.QPushButton(
-                "nipple off",
-                self
-            )
-            buttonNippleOff.clicked.connect(
-                lambda: self.nipple_switch(status = "off")
-            )
-            buttonsList.append(buttonNippleOff)
-            # button: stylus proximity monitoring on
-            buttonStylusProximityControlOn = QtGui.QPushButton(
-                "stylus proximity monitoring on",
-                self
-            )
-            buttonStylusProximityControlOn.clicked.connect(
-                lambda: self.stylus_proximity_control_switch(status = "on")
-            )
-            buttonsList.append(buttonStylusProximityControlOn)
-            # button: stylus proximity monitoring off
-            buttonStylusProximityControlOff = QtGui.QPushButton(
-                "stylus proximity monitoring off",
-                self
-            )
-            buttonStylusProximityControlOff.clicked.connect(
-                lambda: self.stylus_proximity_control_switch(status = "off")
-            )
-            buttonsList.append(buttonStylusProximityControlOff)
-            # button: acceleration monitoring on
-            buttonAccelerationControlOn = QtGui.QPushButton(
-                "acceleration monitoring on",
-                self
-            )
-            buttonAccelerationControlOn.clicked.connect(
-                lambda: self.acceleration_control_switch(status = "on")
-            )
-            buttonsList.append(buttonAccelerationControlOn)
-            # button: acceleration monitoring off
-            buttonAccelerationControlOff = QtGui.QPushButton(
-                "acceleration monitoring off",
-                self
-            )
-            buttonAccelerationControlOff.clicked.connect(
-                lambda: self.acceleration_control_switch(status = "off")
-            )
-            buttonsList.append(buttonAccelerationControlOff)
-            # button: display position monitoring on
-            buttondisplay_position_controlOn = QtGui.QPushButton(
-                "display position monitoring on",
-                self
-            )
-            buttondisplay_position_controlOn.clicked.connect(
-                lambda: self.display_position_control_switch(status = "on")
-            )
-            buttonsList.append(buttondisplay_position_controlOn)
-            # button: display position monitoring off
-            buttondisplay_position_controlOff = QtGui.QPushButton(
-                "display position monitoring off",
-                self
-            )
-            buttondisplay_position_controlOff.clicked.connect(
-                lambda: self.display_position_control_switch(status = "off")
-            )
-            buttonsList.append(buttondisplay_position_controlOff)
-            # set button dimensions
-            buttonsWidth  = 240
-            buttonsHeight = 30
-            for button in buttonsList:
-                button.setFixedSize(buttonsWidth, buttonsHeight)
-                button.setStyleSheet(
-                    """
-                    color: #000000;
-                    background-color: #ffffff;
-                    border: 1px solid #000000;
-                    font-size: 10pt;
-                    text-align: left;
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    """
-                )
-            # set layout
-            vbox = QtGui.QVBoxLayout()
-            vbox.addStretch(1)
-            for button in buttonsList:
-                vbox.addWidget(button)
-                vbox.addStretch(1)	
-            self.setLayout(vbox)
-            # window
-            self.setWindowTitle("spin")
-            # set window position
-            self.move(0, 0)
-            self.show()
-        elif options["--nogui"]:
-            log.info("non-GUI mode")
+        self.device_names = get_inputs()
+        log.debug("Device names: {device_names}".format(device_names = self.device_names))
+        # Set default laptop mode
+        self.mode = "laptop"
+        self.orientation = "normal"
+        self.locked = True
+        # Engage stylus proximity control
+        self.stylus_proximity_switch(status = True)
+        # Start a queue for reading screen rotation from the accelerometer
+        self.accelerometer_queue = Queue()
+        self.accelerometer_timer = QtCore.QTimer()
+        self.accelerometer_timer.timeout.connect(self.accelerometer_listen)
+        self.accelerometer_timer.start(100)
+        self.accelerometer_switch(status = True)
+        # Listen for commands through a socket
+        if os.path.exists(SPIN_SOCKET):
+            os.remove(SPIN_SOCKET)
+        self.spin_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.spin_socket.setblocking(0)
+        self.spin_socket.bind(SPIN_SOCKET)
+        self.spin_timer = QtCore.QTimer()
+        self.spin_timer.timeout.connect(self.socket_listen)
+        self.spin_timer.start(105)
+        # Listen for ACPI events
+        self.acpi_queue = Queue()
+        self.acpi_timer = QtCore.QTimer()
+        self.acpi_timer.timeout.connect(self.acpi_listen)
+        self.acpi_timer.start(110)
+        self.acpi_switch(True)
+
+
+    def signal_handler(self, signal, frame):
+        log.info('You pressed Ctrl-C!')
+        self.close_event('bla')
+        sys.exit(0)
+
 
     def close_event(self, event):
-        log.info("terminate {name}".format(name = name))
-        self.stylus_proximity_control_switch(status = "off")
-        self.display_position_control_switch(status = "off")
-        self.deleteLater() 
+        log.info("Terminating Yoga Spin Daemon")
+        if self.mode == "tablet":
+            self.engage_mode("laptop")
+        self.stylus_proximity_switch(status = False)
+        self.accelerometer_switch(status = False)
+        self.acpi_switch(status = False)
+        try:
+            os.remove(SPIN_SOCKET)
+        except:
+            pass
 
-    def display_orientation(
-        self,
-        orientation = None
-        ):
+
+    def display_orientation(self, orientation = None):
         if orientation in ["left", "right", "inverted", "normal"]:
-            log.info("change display to {orientation}".format(
-                orientation = orientation
-            ))
-            engage_command(
-                "xrandr -o {orientation}".format(
-                    orientation = orientation
-                )
+            log.info("Orienting display to {0}".format(orientation))
+            engage_command("xrandr -o {0}".format(orientation))
+            # TODO! Hack to reset calibration.
+            engage_command("xsetwacom --set \"{stylus}\" ResetArea".format(
+                stylus = self.device_names["stylus"])
             )
         else:
-            log.error(
-                "unknown display orientation \"{orientation}\" "
-                "requested".format(
-                    orientation = orientation
-                )
-            )
+            log.error("Unknown display orientation \"{0}\" requested".format(orientation))
             sys.exit()
 
-    def touchscreen_orientation(
-        self,
-        orientation = None
-        ):
-        if "touchscreen" in self.deviceNames:
-            coordinateTransformationMatrix = {
+    def touchscreen_orientation(self, orientation = None):
+        if "touchscreen" in self.device_names:
+            coordinate_matrix = {
                 "left":     "0 -1 1 1 0 0 0 0 1",
                 "right":    "0 1 0 -1 0 1 0 0 1",
                 "inverted": "-1 0 1 0 -1 1 0 0 1",
                 "normal":   "1 0 0 0 1 0 0 0 1"
             }
-            if coordinateTransformationMatrix.has_key(orientation):
-                log.info("change touchscreen to {orientation}".format(
-                    orientation = orientation
-                ))
+            # Waiting for the touchscreen to reconnect, after the screen rotates.
+            while not self.is_touchscreen_alive():
+                time.sleep(0.5)
+            if coordinate_matrix.has_key(orientation):
+                log.info("Orienting touchscreen to {0}".format(orientation))
                 engage_command(
-                    "xinput set-prop \"{deviceName}\" \"Coordinate "
-                    "Transformation Matrix\" "
-                    "{matrix}".format(
-                        deviceName = self.deviceNames["touchscreen"],
-                        matrix = coordinateTransformationMatrix[orientation]
+                    "xinput set-prop \"{device_name}\" \"Coordinate Transformation Matrix\" {matrix}".format(
+                        device_name = self.device_names["touchscreen"],
+                        matrix = coordinate_matrix[orientation]
                     )
                 )
             else:
-                log.error(
-                    "unknown touchscreen orientation \"{orientation}\""
-                    " requested".format(
-                        orientation = orientation
-                    )
-                )
+                log.error("Unknown touchscreen orientation \"{0}\" requested".format(orientation))
                 sys.exit()
         else:
-            log.debug("touchscreen orientation unchanged")
+            log.debug("Touchscreen orientation unchanged")
 
-    def touchscreen_switch(
-        self,
-        status = None
-        ):
-        if "touchscreen" in self.deviceNames:
-            xinputStatus = {
-                "on":  "enable",
-                "off": "disable"
+    def touchscreen_switch(self, status = None):
+        if "touchscreen" in self.device_names:
+            xinput_status = {
+                True:  "enable",
+                False: "disable"
             }
-            if xinputStatus.has_key(status):
-                log.info("change touchscreen to {status}".format(
-                    status = status
+            while not self.is_touchscreen_alive():
+                time.sleep(0.5)
+            if xinput_status.has_key(status):
+                log.info("{status} touchscreen".format(
+                    status = xinput_status[status].title()
                 ))
                 engage_command(
-                    "xinput {status} \"{deviceName}\"".format(
-                        status = xinputStatus[status],
-                        deviceName = self.deviceNames["touchscreen"]
+                    "xinput {status} \"{device_name}\"".format(
+                        status = xinput_status[status],
+                        device_name = self.device_names["touchscreen"]
                     )
                 )
             else:
-                _message = "unknown touchscreen status \"{status}\" " +\
-                           "requested"
-                log.error(
-                    _message.format(
-                        status = status
-                    )
-                )
+                log.error("Unknown touchscreen status \"{0}\" requested".format(status))
                 sys.exit()
         else:
-            log.debug("touchscreen status unchanged")
+            log.debug("Touchscreen status unchanged")
 
-    def touchpad_orientation(
-        self,
-        orientation = None
-        ):
-        if "touchpad" in self.deviceNames:
-            coordinateTransformationMatrix = {
-                "left":     "0 -1 1 1 0 0 0 0 1",
-                "right":    "0 1 0 -1 0 1 0 0 1",
-                "inverted": "-1 0 1 0 -1 1 0 0 1",
-                "normal":   "1 0 0 0 1 0 0 0 1"
+    
+    def touchpad_switch(self, status = None):
+        if "touchpad" in self.device_names:
+            xinput_status = {
+                True:  "enable",
+                False: "disable"
             }
-            if coordinateTransformationMatrix.has_key(orientation):
-                log.info("change touchpad to {orientation}".format(
-                    orientation = orientation
+            if xinput_status.has_key(status):
+                log.info("{status} touchpad".format(
+                    status = xinput_status[status].title()
                 ))
                 engage_command(
-                    "xinput set-prop \"{deviceName}\" \"Coordinate "
-                    "Transformation Matrix\" "
-                    "{matrix}".format(
-                        deviceName = self.deviceNames["touchpad"],
-                        matrix = coordinateTransformationMatrix[orientation]
+                    "xinput {status} \"{device_name}\"".format(
+                        status = xinput_status[status],
+                        device_name = self.device_names["touchpad"]
                     )
                 )
             else:
-                log.error(
-                    "unknown touchpad orientation \"{orientation}\""
-                    " requested".format(
-                        orientation = orientation
-                    )
-                )
+                log.error("Unknown touchpad status \"{0}\" requested".format(status))
                 sys.exit()
         else:
-            log.debug("touchpad orientation unchanged")
+            log.debug("Touchpad status unchanged")
 
-    def touchpad_switch(
-        self,
-        status = None
-        ):
-        if "touchpad" in self.deviceNames:
-            xinputStatus = {
-                "on":  "enable",
-                "off": "disable"
+
+    def nipple_switch(self, status = None):
+        if "nipple" in self.device_names:
+            xinput_status = {
+                True:  "enable",
+                False: "disable"
             }
-            if xinputStatus.has_key(status):
-                log.info("change touchpad to {status}".format(
-                    status = status
+            if xinput_status.has_key(status):
+                log.info("{status} nipple".format(
+                    status = xinput_status[status].title()
                 ))
                 engage_command(
-                    "xinput {status} \"{deviceName}\"".format(
-                        status = xinputStatus[status],
-                        deviceName = self.deviceNames["touchpad"]
+                    "xinput {status} \"{device_name}\"".format(
+                        status = xinput_status[status],
+                        device_name = self.device_names["nipple"]
                     )
                 )
             else:
-                _message = "unknown touchpad status \"{status}\" " +\
-                           "requested"
-                log.error(
-                    _message.format(
-                        status = status
-                    )
-                )
+                log.error("Unknown nipple status \"{0}\" requested".format(status))
                 sys.exit()
         else:
-            log.debug("touchpad status unchanged")
+            log.debug("Nipple status unchanged")
 
-    def nipple_switch(
-        self,
-        status = None
-        ):
-        if "nipple" in self.deviceNames:
-            xinputStatus = {
-                "on":  "enable",
-                "off": "disable"
-            }
-            if xinputStatus.has_key(status):
-                log.info("change nipple to {status}".format(
-                    status = status
-                ))
-                engage_command(
-                    "xinput {status} \"{deviceName}\"".format(
-                        status = xinputStatus[status],
-                        deviceName = self.deviceNames["nipple"]
-                    )
-                )
-            else:
-                _message = "unknown nipple status \"{status}\" " +\
-                           "requested"
-                log.error(
-                    _message.format(
-                        status = status
-                    )
-                )
-                sys.exit()
-        else:
-            log.debug("nipple status unchanged")
 
-    def stylus_proximity_control(
-        self
-        ):
-        self.previousStylusProximityStatus = None
+    def stylus_proximity(self):
+        self.previous_stylus_proximity = None
         while True:
-            stylusProximityCommand = "xinput query-state " + \
-                                     "\"Wacom ISDv4 EC Pen stylus\" | " + \
+            stylus_proximity_command = "xinput query-state " + \
+                                     "\""+self.device_names["stylus"]+"\" | " + \
                                      "grep Proximity | cut -d \" \" -f3 | " + \
                                      " cut -d \"=\" -f2"
-            self.stylusProximityStatus = subprocess.check_output(
-                stylusProximityCommand,
+            self.stylus_proximity = subprocess.check_output(
+                stylus_proximity_command,
                 shell = True
             ).lower().rstrip()
-            if \
-                (self.stylusProximityStatus == "out") and \
-                (self.previousStylusProximityStatus != "out"):
-                log.info("stylus inactive")
-                self.touchscreen_switch(status = "on")
-            elif \
-                (self.stylusProximityStatus == "in") and \
-                (self.previousStylusProximityStatus != "in"):
-                log.info("stylus active")
-                self.touchscreen_switch(status = "off")
-            self.previousStylusProximityStatus = self.stylusProximityStatus
+            if  self.stylus_proximity == "out" and \
+                self.previous_stylus_proximity != "out":
+                log.info("Stylus inactive")
+                self.touchscreen_switch(status = True)
+            elif self.stylus_proximity == "in" and \
+                self.previous_stylus_proximity != "in":
+                log.info("Stylus active")
+                self.touchscreen_switch(status = False)
+            self.previous_stylus_proximity = self.stylus_proximity
             time.sleep(0.15)
 
-    def stylus_proximity_control_switch(
-        self,
-        status = None
-        ):
-        if status == "on":
-            log.info("change stylus proximity control to on")
-            self.processStylusProximityControl = multiprocessing.Process(
-                target = self.stylus_proximity_control
+
+    def stylus_proximity_switch(self, status = None):
+        if status == True:
+            log.info("Enabling stylus proximity sensor")
+            self.stylus_proximity_process = Process(
+                target = self.stylus_proximity
             )
-            self.processStylusProximityControl.start()
-        elif status == "off":
-            log.info("change stylus proximity control to off")
-            self.processStylusProximityControl.terminate()
+            self.stylus_proximity_process.start()
+        elif status == False:
+            log.info("Disabling stylus proximity sensor")
+            self.stylus_proximity_process.terminate()
         else:
-            log.error(
-                "unknown stylus proximity control status \"{status}\" "
-                "requested".format(
-                    status = status
-                )
-            )
+            log.error("Unknown stylus proximity control status \"{0}\" requested".format(status))
             sys.exit()
 
-    def acceleration_control(self):
-        while True:
-            # Get the mean of recent acceleration vectors.
-            numberOfMeasurements = 3
-            measurements = []
-            for measurement in range(0, numberOfMeasurements):
-                measurements.append(AccelerationVector())
-            stableAcceleration = mean_list(lists = measurements)
-            log.info("stable acceleration vector: {vector}".format(
-                vector = stableAcceleration
-            ))
-            tableOrientations = {
-                (True,  True):  "left",
-                (True,  False): "right",
-                (False, True):  "inverted",
-                (False, False): "normal"
-            }
-            orientation = tableOrientations[(
-                abs(stableAcceleration[0]) > abs(stableAcceleration[1]),
-                stableAcceleration[0] > 0
-            )]
-            self.engage_mode(mode = orientation)
-            time.sleep(0.15)
 
-    def acceleration_control_switch(
-        self,
-        status = None
-        ):
-        if status == "on":
-            log.info("change acceleration control to on")
-            self.processAccelerationControl = multiprocessing.Process(
-                target = self.acceleration_control
-            )
-            self.processAccelerationControl.start()
-        elif status == "off":
-            log.info("change acceleration control to off")
-            self.processAccelerationControl.terminate()
+    def acpi_listen(self):
+        if self.acpi_queue.empty():
+            return
+        mode = self.acpi_queue.get()
+        if mode == "togglelock":
+            self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
+            self.engage_mode('togglelock')
         else:
-            log.error(
-                "unknown acceleration control status \"{status}\" "
-                "requested".format(
-                    status = status
-                )
+            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
+
+
+    def socket_listen(self):
+        try:
+            command = self.spin_socket.recv(1024)
+            if command:
+                self.engage_mode(command)
+        except:
+            # TODO! Output debug info
+            pass
+
+
+    def accelerometer_listen(self):
+        if self.accelerometer_queue.empty():
+            return
+        orientation = self.accelerometer_queue.get()
+        if not self.locked:
+            self.engage_mode(orientation)
+
+
+    def accelerometer_switch(self, status = None):
+        if status == True:
+            log.info("Turning accelerometer on")
+            self.accelerometer_process = Process(
+                target = acceleration_sensor,
+                args = (self.accelerometer_queue, self.orientation)
             )
+            self.accelerometer_process.start()
+        elif status == False:
+            log.info("Turning accelerometer off")
+            if hasattr(self, 'accelerometer_process'):
+                self.accelerometer_process.terminate()
+        else:
+            log.error("Unknown accelerometer status \"{0}\" requested".format(status))
             sys.exit()
 
-    def display_position_control(self):
-        socketACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        socketACPI.connect("/var/run/acpid.socket")
-        log.info("display position is {displayPositionStatus}".format(
-            displayPositionStatus = self.displayPositionStatus
-            )
-        )
-        while True:
-            eventACPI = socketACPI.recv(4096)
-            # Ubuntu 13.10 compatibility:
-            #eventACPIDisplayPositionChange = \
-            #    "ibm/hotkey HKEY 00000080 000060c0\n"
-            # Ubuntu 14.04 compatibility:
-            eventACPIDisplayPositionChange = \
-                "ibm/hotkey LEN0068:00 00000080 000060c0\n"
-            if eventACPI == eventACPIDisplayPositionChange:
-                log.info("display position change")
-                if self.displayPositionStatus == "laptop":
-                    self.engage_mode(mode = "tablet")
-                    self.displayPositionStatus = "tablet"
-                    log.info(
-                        "display position is {displayPositionStatus}".format(
-                            displayPositionStatus = self.displayPositionStatus
-                        )
-                    )
-                elif self.displayPositionStatus == "tablet":
-                    self.engage_mode(mode = "laptop")
-                    self.displayPositionStatus = "laptop"
-                    log.info(
-                        "display position is {displayPositionStatus}".format(
-                            displayPositionStatus = self.displayPositionStatus
-                        )
-                    )
-            time.sleep(0.15)
 
-    def display_position_control_switch(
-        self,
-        status = None
-        ):
-        if status == "on":
-            log.info("change display position control to on")
-            self.processdisplay_position_control = multiprocessing.Process(
-                target = self.display_position_control
+    def acpi_switch(self, status = None):
+        if status == True:
+            log.info("Listening to ACPI events")
+            self.acpi_process = Process(
+                target = acpi_sensor,
+                args = (self.acpi_queue,)
             )
-            self.processdisplay_position_control.start()
-        elif status == "off":
-            log.info("change display position control to off")
-            self.processdisplay_position_control.terminate()
+            self.acpi_process.start()
+        elif status == False:
+            log.info("Stopped listening to ACPI events")
+            try:
+                self.acpi_process.terminate()
+            except:
+                pass
         else:
-            log.error(
-                "unknown display position control status \"{orientation}\" "
-                "requested".format(
-                    status = status
-                )
-            )
+            log.error("unknown acpi control status \"{0}\" requested".format(status))
             sys.exit()
 
-    def engage_mode(
-        self,
-        mode = None
-        ):
-        log.info("engage mode {mode}".format(
-            mode = mode
-        ))
+    
+    def engage_mode(self, mode = None):
+        log.info("Engage mode {mode}".format(mode = mode))
+        if mode == "toggle":
+            if self.mode == "laptop":
+                mode = "tablet"
+            else:
+                mode = "laptop"
+            self.mode = mode
         if mode == "tablet":
-            self.display_orientation(orientation     = "left")
-            self.touchscreen_orientation(orientation = "left")
-            self.touchpad_switch(status              = "off")
-            self.nipple_switch(status                = "off") 
+            print(" *** TABLET ***")
+            self.nipple_switch(status = False) 
+            self.touchpad_switch(status = False)
+            self.locked = False
+            os.system('notify-send "Tablet Mode"')
         elif mode == "laptop":
-            self.display_orientation(orientation     = "normal")
+            print(" *** LAPTOP ***")
+            self.locked = True
+            self.touchpad_switch(status = True)
+            self.nipple_switch(status = True)
+            self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
-            self.touchscreen_switch(status           = "on")
-            self.touchpad_orientation(orientation    = "normal")
-            self.touchpad_switch(status              = "on")
-            self.nipple_switch(status                = "on")
+            os.system('notify-send "Laptop Mode"')
         elif mode in ["left", "right", "inverted", "normal"]:
-            self.display_orientation(orientation     = mode)
+            self.display_orientation(orientation = mode)
             self.touchscreen_orientation(orientation = mode)
-            self.touchpad_orientation(orientation    = mode)
+        elif mode == "togglelock":
+            if self.locked is True:
+                self.locked = False
+                log.info("Rotation lock disabled")
+                os.system('notify-send "Rotation Lock Disabled"')
+            else:
+                self.locked = True
+                log.info("Rotation lock enabled")
+                os.system('notify-send "Rotation Lock Enabled"')
         else:
-            log.error(
-                "unknown mode \"{mode}\" requested".format(
-                    mode = mode
-                )
-            )
+            log.error("Unknown mode \"{mode}\" requested".format(mode = mode))
             sys.exit()
+        time.sleep(2)  # Switching modes too fast seems to cause trobule
+
+
+    def is_touchscreen_alive(self):
+        ''' Check if the touchscreen is responding '''
+        log.info("Waiting for touchscreen to respond")
+        status = os.system('xinput list | grep -q "{touchscreen}"'.format(touchscreen = self.device_names["touchscreen"]))
+        if status == 0:
+            return True
+        else:
+            return False
+        
 
 def get_inputs():
-    log.info("audit inputs")
-    inputDevices = subprocess.Popen(
+    log.info("Audit Inputs:")
+    input_devices = subprocess.Popen(
         ["xinput", "--list"],
         stdin = subprocess.PIPE,
         stdout = subprocess.PIPE,
         stderr = subprocess.PIPE
     ).communicate()[0]
-    devicesAndKeyphrases = {
+    devices_and_keyphrases = {
         "touchscreen": ["SYNAPTICS Synaptics Touch Digitizer V04",
                         "ELAN Touchscreen"],
         "touchpad":    ["PS/2 Synaptics TouchPad",
@@ -691,38 +392,84 @@ def get_inputs():
         "nipple":      ["TPPS/2 IBM TrackPoint"],
         "stylus":      ["Wacom ISDv4 EC Pen stylus"]
     }
-    deviceNames = {}
-    for device, keyphrases in devicesAndKeyphrases.iteritems():
+    device_names = {}
+    for device, keyphrases in devices_and_keyphrases.iteritems():
         for keyphrase in keyphrases:
-            if keyphrase in inputDevices:
-                deviceNames[device] = keyphrase
-    for device, keyphrases in devicesAndKeyphrases.iteritems():
-        if device in deviceNames:
-            log.info("input {device} detected as \"{deviceName}\"".format(
-                device     = device,
-                deviceName = deviceNames[device]
+            if keyphrase in input_devices:
+                device_names[device] = keyphrase
+    for device, keyphrases in devices_and_keyphrases.iteritems():
+        if device in device_names:
+            log.info(" - {device} detected as \"{deviceName}\"".format(
+                device     = device.title(),
+                deviceName = device_names[device]
             ))
         else:
-            log.info("input {device} not detected".format(
-                device = device
+            log.info(" - {device} not detected".format(
+                device = device.title()
             ))
-    return(deviceNames)
+    return(device_names)
 
-def engage_command(
-    command = None
-    ):
-    if options["--debugpassive"] is True:
-        log.info("command: {command}".format(
-            command = command
-        ))
-    else:
-        os.system(command)
 
-def mean_list(
-    lists = None
-    ):
+def engage_command(command = None):
+    os.system(command)
+
+
+def mean_list(lists = None):
     return([sum(element)/len(element) for element in zip(*lists)])
 
+
+def acceleration_sensor(accelerometer_queue, old_orientation="normal"):
+    while True:
+        # Get the mean of recent acceleration vectors.
+        number_of_measurements = 6
+        measurements = []
+        for measurement in range(0, number_of_measurements):
+            time.sleep(0.25)
+            measurements.append(AccelerationVector())
+        stable_acceleration = mean_list(lists = measurements)
+        log.debug("Stable acceleration vector: {vector}".format(
+            vector = stable_acceleration
+        ))
+        # Using numpy to compare rotation vectors.
+        stable = array((stable_acceleration[0], stable_acceleration[1], stable_acceleration[2]))
+        normal = array((0.0, -1, 0))
+        right = array((-1.0, 0, 0))
+        inverted = array((0.0, 1, 0))
+        left = array((1.0, 0, 0))
+        d = {
+            "normal": dot(stable, normal) / norm(stable) / norm(normal),
+            "inverted": dot(stable, inverted) / norm(stable) / norm(inverted),
+            "left": dot(stable, left) / norm(stable) / norm(left),
+            "right": dot(stable, right) / norm(stable) / norm(right)
+        }
+        orientation = max(d, key=d.get)
+        if old_orientation != orientation:
+            old_orientation = orientation
+            accelerometer_queue.put(orientation)
+        time.sleep(0.15)
+
+
+def acpi_sensor(acpi_queue):
+    socket_ACPI = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    socket_ACPI.connect("/var/run/acpid.socket")
+    while True:
+        event_ACPI = socket_ACPI.recv(4096)
+        log.debug("ACPI event: {0}".format(event_ACPI))
+        display_position_event = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
+        rotation_lock_event = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        if event_ACPI == rotation_lock_event:
+            acpi_queue.put("togglelock")
+        elif event_ACPI == display_position_event:
+            log.info("Display position changed. Event not implemented.")
+            acpi_queue.put("display_position_change")
+        else:
+            log.info("Unknown acpi event triggered: {0}".format(event_ACPI))
+            acpi_queue.put("unknown")
+        time.sleep(0.1)
+    socket_ACPI.close()
+
+
+# TODO! Make variable names consistent.
 class AccelerationVector(list):
 
     def __init__(self):
@@ -767,23 +514,63 @@ class AccelerationVector(list):
         self.update()
         return(list.__repr__(self))
 
-def main(options):
 
-    # logging
+def send_command(command):
+    if os.path.exists(SPIN_SOCKET):
+        command_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        try:
+            command_socket.connect(SPIN_SOCKET)
+            command_socket.send(command)
+            log.info("Connected to socket")
+        except:
+            log.info("Failed to send mode change to the spin daemon")
+    else:
+        log.error("Socket does not exist. Is the spin deamon running.")
+
+
+def main():
     global log
-    log        = logging.getLogger()
+    log = logging.getLogger()
     logHandler = logging.StreamHandler()
     log.addHandler(logHandler)
     logHandler.setFormatter(logging.Formatter("%(message)s"))
-    log.level  = logging.INFO
 
-    application = QtGui.QApplication(sys.argv)
-    interface1  = interface(options)
-    sys.exit(application.exec_())
+    parser = argparse.ArgumentParser(description="Switch between laptop and tablet mode for ThinkPad Yoga 12")
+    parser.add_argument("-v", "--version",
+                        help="Print out the version number",
+                        action="store_true")
+    parser.add_argument("-d", "--daemon",
+                        help="Run in the background as a daemon",
+                        action="store_true")
+    parser.add_argument("-m", "--mode",
+                        help="Toggle between Tablet and Laptop mode",
+                        action="store_true")
+    parser.add_argument("-r", "--rotatelock",
+                        help="Toggle screen rotation locking",
+                        action="store_true")
+    parser.add_argument("-l", "--loglevel",
+                        help="Log level (1=debug, 2=info, 3=warning, 4=error, 5=critical)",
+                        type=int,
+                        default=4)
+    args = parser.parse_args()
+
+    log.level = args.loglevel * 10
+    if args.version:
+        # TODO! Have version update
+        print(version)
+    elif args.daemon:
+        log.info("Starting Yoga Spin background daemon")
+        app = QtCore.QCoreApplication(sys.argv)
+        daemon = Daemon()
+        sys.exit(app.exec_())
+    elif args.mode:
+        log.info("Toggle between tablet and laptop mode")
+        send_command("toggle")
+    elif args.rotatelock:
+        log.info("Toggle the rotation lock on/off")
+        send_command("togglelock")
+    else:
+        log.info("No arguments passed. Doing nothing.")
 
 if __name__ == "__main__":
-    options = docopt.docopt(__doc__)
-    if options["--version"]:
-        print(version)
-        exit()
-    main(options)
+    main()
