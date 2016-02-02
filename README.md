@@ -64,10 +64,10 @@ This toggles the display rotation lock when in Tablet mode. You can also use the
 
 In addition there are two applications launchers, which can be found in /usr/share/applications/Yoga Spin - *, that can run these commands. You can drag these to the Unity launcher, to quickly toggle between modes.
 
-For debugging, you can run spin.py with different log levels, for more info, see:
+For debugging, you can run spin.py with different log levels:
 
 ```Bash
-spin.py --help
+spin.py --daemon --loglevel 2
 ```
 
 
