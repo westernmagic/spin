@@ -158,5 +158,6 @@ This is a fork of wdbm/spin. Everything should be working properly with my Think
 
 Known issues:
 
+- Sometimes rotating the screen doesn't work, and Ubuntu pops up an error in the settings-daemon. This error also sometimes happens when you change the screen orientation using the default System Settings > Display from Ubuntu's menus, so it's not really a spin.py bug. Fortunately, simply rotating the screen back, waiting a few seconds, and then rotating it back again, will get around it.
 - I've yet to get the display position detector to differentiate when going from tent mode, to tablet or laptop mode, so am currently unable to use it to automatically switch between tablet and laptop modes. It's not ideal, and I've posted about this upstream to the systemd folks, so hopefully we'll have this fully automated some day. If anyone has a solution to this, I would love to hear from you.
 
