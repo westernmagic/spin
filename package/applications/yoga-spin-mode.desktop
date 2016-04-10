@@ -4,3 +4,20 @@ Exec=spin.py --mode
 Terminal=false
 Type=Application
 Icon=yoga-spin-mode
+
+X-Ayatana-Desktop-Shortcuts=lock;calibrate;reset
+
+[lock Shortcut Group]
+Name=Toggle Rotation Lock
+Exec=spin.py --rotatelock
+TargetEnvironment=Unity
+
+[calibrate Shortcut Group]
+Name=Calibrate Stylus
+Exec=spin.py --calibrate
+TargetEnvironment=Unity
+
+[reset Shortcut Group]
+Name=Reset Stylus Calibration
+Exec=spin.py --reset
+TargetEnvironment=Unity
