@@ -122,9 +122,9 @@ class Calibration():
                                                                                                  miny=self.calibration[self.orientation][1],
                                                                                                  maxx=self.calibration[self.orientation][2],
                                                                                                  maxy=self.calibration[self.orientation][3])
-        log.debug('Wacom stylus calibration set to {area} for "{orientation}" screen orientation'.format(area=self.calibration[self.orientation],
+        log.info('Wacom stylus calibration set to {area} for "{orientation}" screen orientation'.format(area=self.calibration[self.orientation],
                                                                                                          orientation=self.orientation))
-        #log.debug(xsetwacom_command)
+        log.debug('Ran {cmd}'.format(cmd=xsetwacom_command))
         os.system(xsetwacom_command)
             
     def reset_calibration(self):
@@ -481,7 +481,7 @@ class Daemon(QtCore.QObject):
 
     def is_touchscreen_alive(self):
         ''' Check if the touchscreen is responding '''
-        log.info("Waiting for touchscreen to respond")
+        log.debug("Waiting for touchscreen to respond")
         status = os.system('xinput list | grep -q "{touchscreen}"'.format(touchscreen = self.device_names["touchscreen"]))
         if status == 0:
             return True
