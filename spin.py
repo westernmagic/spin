@@ -142,8 +142,10 @@ class Calibration():
         old_cal = self.calibration[self.orientation]
         print('Calibrating screen for "{orientation}" screen orientation'.format(orientation=self.orientation))
         print('Old calibration: {old}'.format(old=old_cal))
-        xinput_calibrator = subprocess.Popen(['xinput_calibrator', '--device', self.device],
-                                             stdout=subprocess.PIPE)
+        xinput_calibrator = subprocess.Popen(['xinput_calibrator', '--device', self.device], stdout=subprocess.PIPE)
+        #xinput_calibrator = subprocess.Popen(['xinput_calibrator', '--device', self.device,
+        #                                      '--precalib', str(old_cal[0]), str(old_cal[2]), str(old_cal[1]), str(old_cal[3])],
+        #                                      stdout=subprocess.PIPE)
         cal = old_cal
         for line in xinput_calibrator.stdout:
             if "MinX" in line:
@@ -154,6 +156,13 @@ class Calibration():
                 cal[2] = int(line.split()[2].split('"')[1])
             elif "MaxY" in line:
                 cal[3] = int(line.split()[2].split('"')[1])
+        #if self.orientation is "inverted":
+        #    print("Screen is inverted")
+        #    normal_cal = cal
+        #    cal[0] = normal_cal[1]
+        #    cal[1] = normal_cal[0]
+        #    cal[2] = normal_cal[3]
+        #    cal[3] = normal_cal[2]
         print('New calibration: {new}'.format(new=cal))
         print('Calibration saved to {settings}'.format(settings=SETTINGS))
         self.calibration[self.orientation] = cal
@@ -451,6 +460,7 @@ class Daemon(QtCore.QObject):
             self.nipple_switch(status = True)
             self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
+            self.set_calibration()
             os.system('notify-send "Laptop Mode"')
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation = mode)
