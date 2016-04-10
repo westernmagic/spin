@@ -46,12 +46,120 @@ import socket
 import time
 import logging
 import argparse
+import json
 from   PyQt4 import QtCore
 from multiprocessing import Process, Queue
 from numpy import (array, dot)
 from numpy.linalg import norm
 
+
 SPIN_SOCKET = '/tmp/yoga_spin.socket'
+SETTINGS = '{home}/.config/spin/spin.conf'.format(home = os.environ['HOME'])
+
+
+class Calibration():
+
+    def __init__(self, device):
+        ''' Load current settings into memory '''
+        self.device = device
+        self.orientation = self.get_orientation()
+        if not os.path.exists(SETTINGS):
+            cal = self.get_calibration()
+            self.calibration = {
+                "normal": [cal[0], cal[1], cal[2], cal[3]],
+                "inverted": [cal[0], cal[1], cal[2], cal[3]],
+                "left": [cal[0], cal[1], cal[2], cal[3]],
+                "right": [cal[0], cal[1], cal[2], cal[3]]
+            }
+            self.save_calibration()
+        else:
+            self.load_calibration()
+
+    def get_orientation(self):
+        ''' Return the current screen orientation '''
+        xrandr = subprocess.Popen(['xrandr', '-q', '--verbose'], stdout=subprocess.PIPE)
+        for line in xrandr.stdout:
+            if "eDP1" in line:
+                return( line.split()[5])
+        print('Warning! Unable to detect screen orientation.')
+        return('normal')
+
+    def get_calibration(self):
+        ''' Return the current calibration values '''
+        current_area = subprocess.check_output(
+            ['xsetwacom',
+             '--get',
+             '{device}'.format(device = self.device),
+             'Area'])
+        return current_area.split()
+        
+
+    def save_calibration(self):
+        """ Write the calibration to disk """
+        try:
+            if not os.path.isdir(os.path.dirname(SETTINGS)):
+                os.makedirs(os.path.dirname(SETTINGS))
+        except Exception, err:
+            print(err)
+        json_data = json.dumps(self.calibration,
+                               sort_keys=True,
+                               indent=4,
+                               separators=(',', ': '))
+        f = open(SETTINGS, "w")
+        f.write(json_data)
+        f.close()
+
+    def load_calibration(self):
+        ''' Load calibration for current screen orientation from disk '''
+        with open(SETTINGS) as cal:
+            self.calibration = json.load(cal)
+
+
+    def set_calibration(self):
+        ''' Set the calibration for the current orientation '''
+        xsetwacom_command = 'xsetwacom --set "{device}" Area {minx} {miny} {maxx} {maxy}'.format(device=self.device,
+                                                                                                 minx=self.calibration[self.orientation][0],
+                                                                                                 miny=self.calibration[self.orientation][1],
+                                                                                                 maxx=self.calibration[self.orientation][2],
+                                                                                                 maxy=self.calibration[self.orientation][3])
+        log.debug('Wacom stylus calibration set to {area} for "{orientation}" screen orientation'.format(area=self.calibration[self.orientation],
+                                                                                                         orientation=self.orientation))
+        #log.debug(xsetwacom_command)
+        os.system(xsetwacom_command)
+            
+    def reset_calibration(self):
+        ''' Reset the calibration for the current screen orientation '''
+        reset_command = 'xsetwacom --set "{device}" ResetArea'.format(device=self.device)
+        os.system(reset_command)
+        cal = self.get_calibration()
+        print('Wacom calibration set to {cal} for "{orientation}" screen orientation'.format(cal=cal,
+                                                                                             orientation=self.orientation))
+        self.calibration[self.orientation] = cal
+        self.save_calibration()
+
+    def calibrate(self):
+        ''' Use xinput_calibrate to calibrate the screen '''
+        old_cal = self.calibration[self.orientation]
+        print('Calibrating screen for "{orientation}" screen orientation'.format(orientation=self.orientation))
+        print('Old calibration: {old}'.format(old=old_cal))
+        xinput_calibrator = subprocess.Popen(['xinput_calibrator', '--device', self.device],
+                                             stdout=subprocess.PIPE)
+        cal = old_cal
+        for line in xinput_calibrator.stdout:
+            if "MinX" in line:
+                cal[0]  = int(line.split()[2].split('"')[1])
+            elif "MinY" in line:
+                cal[1] = int(line.split()[2].split('"')[1])
+            elif "MaxX" in line:
+                cal[2] = int(line.split()[2].split('"')[1])
+            elif "MaxY" in line:
+                cal[3] = int(line.split()[2].split('"')[1])
+        print('New calibration: {new}'.format(new=cal))
+        print('Calibration saved to {settings}'.format(settings=SETTINGS))
+        self.calibration[self.orientation] = cal
+        self.set_calibration()
+        self.save_calibration()
+
 
 
 class Daemon(QtCore.QObject):
@@ -119,10 +227,6 @@ class Daemon(QtCore.QObject):
         if orientation in ["left", "right", "inverted", "normal"]:
             log.info("Orienting display to {0}".format(orientation))
             engage_command("xrandr -o {0}".format(orientation))
-            # TODO! Hack to reset calibration.
-            engage_command("xsetwacom --set \"{stylus}\" ResetArea".format(
-                stylus = self.device_names["stylus"])
-            )
         else:
             log.error("Unknown display orientation \"{0}\" requested".format(orientation))
             sys.exit()
@@ -351,6 +455,7 @@ class Daemon(QtCore.QObject):
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation = mode)
             self.touchscreen_orientation(orientation = mode)
+            self.set_calibration()
         elif mode == "togglelock":
             if self.locked is True:
                 self.locked = False
@@ -360,10 +465,18 @@ class Daemon(QtCore.QObject):
                 self.locked = True
                 log.info("Rotation lock enabled")
                 os.system('notify-send "Rotation Lock Enabled"')
+        elif mode == "calibrate":
+            print(" *** Calibrating Wacom Pen *** ")
+            self.calibrate()
         else:
             log.error("Unknown mode \"{mode}\" requested".format(mode = mode))
             sys.exit()
         time.sleep(2)  # Switching modes too fast seems to cause trobule
+
+    def set_calibration(self):
+        ''' Set the Wacom calibration for the current orientation '''
+        cal = Calibration(self.device_names['stylus'])
+        cal.set_calibration()
 
 
     def is_touchscreen_alive(self):
@@ -548,6 +661,12 @@ def main():
     parser.add_argument("-r", "--rotatelock",
                         help="Toggle screen rotation locking",
                         action="store_true")
+    parser.add_argument("-c", "--calibrate",
+                        help="Calibrate the Wacom pen for the current screen orientation",
+                        action="store_true")
+    parser.add_argument("-x", "--reset",
+                        help="Reset the Wacom pen calibration for the current screen orientation",
+                        action="store_true")
     parser.add_argument("-l", "--loglevel",
                         help="Log level (1=debug, 2=info, 3=warning, 4=error, 5=critical)",
                         type=int,
@@ -569,6 +688,14 @@ def main():
     elif args.rotatelock:
         log.info("Toggle the rotation lock on/off")
         send_command("togglelock")
+    elif args.calibrate:
+        log.info("Calibrating the Wacom pen")
+        cal = Calibration('Wacom ISDv4 EC Pen stylus')
+        cal.calibrate()
+    elif args.reset:
+        log.info("Resetting the Wacom pen calibration")
+        cal = Calibration('Wacom ISDv4 EC Pen stylus')
+        cal.reset_calibration()
     else:
         log.info("No arguments passed. Doing nothing.")
 
