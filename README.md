@@ -99,7 +99,7 @@ If you have already messed up your calibration using the systems Wacom calibrato
 ```Bash
 # List wacom devices
 xsetwacom --list
-# Resetting the calibratino for the stylus listed above
+# Resetting the calibration for the stylus listed above
 xsetwacom --set "Wacom ISDv4 EC Pen stylus" ResetArea
 # Print out the current calibration values
 xsetwacom --get "Wacom ISDv4 EC Pen stylus" Area
@@ -111,7 +111,9 @@ See https://bugs.launchpad.net/ubuntu/+source/gnome-control-center/+bug/1163107 
 
 ### calibrating using spin.py
 
-You can use spin.py, through the xinput_calibrator command, to calibrate your Wacom pen correctly for each screen orientation. To use this, simply rotate the screen to the orientation you want to calibrate it in (using spin.py daemon in tablet mode), and run:
+Note! For now this only works correctly when the screen is oriented the right way up. See perfect calibration below, for calibrating your screen when it's rotated.
+
+You can use spin.py, through the xinput_calibrator command, to calibrate your Wacom pen correctly. To right click the Yoga icon from the Unity launcher, and choose "Calibrate Stylus" or run:
 
 ```Bash
 spin.py --calibrate
@@ -128,6 +130,34 @@ spin.py --reset
 ```
 
 The resulting calibrations are stored in a json file found in ~/.config/spin/spin.conf, and applied each time spin.py changes the orientation of the screen.
+
+### perfect calibration
+
+It's really hard to get 100% perfect calibration, especially when the screen is rotated in any orientation but normal (this is a possible bug, see knwon limitations below). If you want perfect calibration, I find the best way is often to do it manually, by entering the values on the command line, testing them, and adjusting the values. Start by getting the current calibration values (possibly resetting the calibration first, as shown above).
+
+
+```Bash
+xsetwacom --get "Wacom ISDv4 EC Pen stylus" Area
+```
+Using the four values returned, run:
+
+```Bash
+xsetwacom --set "Wacom ISDv4 EC Pen stylus" Area 0 0 27748 15652
+```
+
+If you change the values and re-run the command, the calibration changes. You can use both negative and positive values. When the screen is oriented the right way up, the numbers represent:
+
+- First number - offset at the left side of the screen
+- Second number - offset at the top of the screen
+- Third number - offset at the right side of the screen
+- Fourth number - offset at the bottom of the screen
+
+The numbers represent the same physical side of the screen, even when it's rotated. So that if you flip the screen up side down, the fourth number is now the top of the screen (the side where the little Windows button is on the screen).
+
+I like to use MyPaint and draw vertical or horizontal paralell lines, trying to trace my first line with the second one. The offset will tell me which number I need to adjust. You could also use two dots to check. Try to stay several centimeters away from the very edge of the screen, as Wacom tablet have never been particularly accurate near the edge of the screen/tablet.
+
+Once you're happy with your manual calibration, enter them into your ~/.config/spin/spin.conf file for that orientation. The numbers in the file are in the same order as when using the xsetwacom command. The next time you switch to that orientation using spin.py, it reads those values, and sets the calibration correctly.
+
 
 ## compatibility
 
@@ -158,6 +188,7 @@ This is a fork of wdbm/spin. Everything should be working properly with my Think
 
 Known issues:
 
-- Sometimes rotating the screen doesn't work, and Ubuntu pops up an error in the settings-daemon. This error also sometimes happens when you change the screen orientation using the default System Settings > Display from Ubuntu's menus, so it's not really a spin.py bug. Fortunately, simply rotating the screen back, waiting a few seconds, and then rotating it back again, will get around it.
+- Getting accurate stylus calibration in any screen orientation other than normal is near impossible using spin.py and the xinput_calibrator. I'm not sure exactly what's going on here, but for now use manual "perfect calibration" as described above.
+- Sometimes rotating the screen doesn't work, and Ubuntu pops up an error for either compiz or the settings-daemon. Fortunately, simply rotating the screen back, waiting a few seconds, and then rotating it back again, will get it back to the orientation you want. I belive this is a bug with Ubuntu, and not spin.py.
 - I've yet to get the display position detector to differentiate when going from tent mode, to tablet or laptop mode, so am currently unable to use it to automatically switch between tablet and laptop modes. It's not ideal, and I've posted about this upstream to the systemd folks, so hopefully we'll have this fully automated some day. If anyone has a solution to this, I would love to hear from you.
 
