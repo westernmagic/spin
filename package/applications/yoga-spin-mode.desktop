@@ -5,11 +5,16 @@ Terminal=false
 Type=Application
 Icon=yoga-spin-mode
 
-X-Ayatana-Desktop-Shortcuts=lock;calibrate;reset
+X-Ayatana-Desktop-Shortcuts=lock;touch;calibrate;reset
 
 [lock Shortcut Group]
 Name=Toggle Rotation Lock
 Exec=spin.py --rotatelock
+TargetEnvironment=Unity
+
+[touch Shortcut Group]
+Name=Toggle Touch Screen
+Exec=spin.py --toggletouch
 TargetEnvironment=Unity
 
 [calibrate Shortcut Group]

@@ -79,7 +79,13 @@ spin.py --lock
 
 This toggles the display rotation lock when in Tablet mode. You can also use the rotate lock key on the side of the computer. Note that this key also transmits the Super-o keys, which in turn opens up the Unity launcher. A workaround for this, is to assign Super-o to an empty keyboard shortcut in the System Preferences.
 
-In addition there are two applications launchers, which can be found in /usr/share/applications/Yoga Spin - *, that can run these commands. You can drag these to the Unity launcher, to quickly toggle between modes.
+```Bash
+spin.py --toggletouch
+```
+
+Even though spin.py disables the touch screen when the pen is near the screen, the touch interface sometimes gets in the way when you're drawing or taking notes, and lift the pen a bit to high with your hand still resting on the screen. This option lets you toggle the touch screen on and off.
+
+In addition there are three applications launchers, which can be found in /usr/share/applications/Yoga Spin - *, that can run these commands. You can drag these to the Unity Launcher, to quickly toggle between modes. Note that the Toggle Mode launcher has a right click menu when placed in the Unity dock, where you can access all the other options, in case you don't want to crowd your launcher with Yoga Spin icons.
 
 For debugging, you can run spin.py with different log levels (1=debug, 2=info, 3=warning, 4=error, 5=critical):
 
@@ -188,6 +194,8 @@ This is a fork of wdbm/spin. Everything should be working properly with my Think
 
 Known issues:
 
+- It does not survive a suspend correctly. Some features, such as the palm rejection still work after a suspend, while others, such as toggling modes, do not.
+- When using the Yoga Spin icons in the Unity Launcher, sometimes the curser turns into a rotating busy cursor while hovering over the Launcher. This is just a visual bug, and everything still works as it should.
 - Getting accurate stylus calibration in any screen orientation other than normal is near impossible using spin.py and the xinput_calibrator. I'm not sure exactly what's going on here, but for now use manual "perfect calibration" as described above.
 - Sometimes rotating the screen doesn't work, and Ubuntu pops up an error for either compiz or the settings-daemon. Fortunately, simply rotating the screen back, waiting a few seconds, and then rotating it back again, will get it back to the orientation you want. I belive this is a bug with Ubuntu, and not spin.py.
 - I've yet to get the display position detector to differentiate when going from tent mode, to tablet or laptop mode, so am currently unable to use it to automatically switch between tablet and laptop modes. It's not ideal, and I've posted about this upstream to the systemd folks, so hopefully we'll have this fully automated some day. If anyone has a solution to this, I would love to hear from you.
