@@ -188,6 +188,7 @@ class Daemon(QtCore.QObject):
         self.mode = "laptop"
         self.orientation = "normal"
         self.locked = True
+        self.touchy = True
         # Engage stylus proximity control
         self.stylus_proximity_switch(status = True)
         # Start a queue for reading screen rotation from the accelerometer
@@ -350,7 +351,8 @@ class Daemon(QtCore.QObject):
             if  self.stylus_proximity == "out" and \
                 self.previous_stylus_proximity != "out":
                 log.info("Stylus inactive")
-                self.touchscreen_switch(status = True)
+                if self.touchy:
+                    self.touchscreen_switch(status = True)
             elif self.stylus_proximity == "in" and \
                 self.previous_stylus_proximity != "in":
                 log.info("Stylus active")
@@ -475,6 +477,19 @@ class Daemon(QtCore.QObject):
                 self.locked = True
                 log.info("Rotation lock enabled")
                 os.system('notify-send "Rotation Lock Enabled"')
+        elif mode == "toggletouch":
+            if self.touchy is True:
+                self.touchy = False
+                self.stylus_proximity_switch(status=False)
+                self.touchscreen_switch(status=False)
+                log.info("Touch screen disabled")
+                os.system('notify-send "Touch Screen Disabled"')
+            else:
+                self.touchy = True
+                self.stylus_proximity_switch(status=True)
+                self.touchscreen_switch(status=True)
+                log.info("Touch screen enabled")
+                os.system('notify-send "Touch Screen Enabled"')
         elif mode == "calibrate":
             print(" *** Calibrating Wacom Pen *** ")
             self.calibrate()
@@ -671,6 +686,9 @@ def main():
     parser.add_argument("-r", "--rotatelock",
                         help="Toggle screen rotation locking",
                         action="store_true")
+    parser.add_argument("-t", "--toggletouch",
+                        help="Toggle touch screen on and off",
+                        action="store_true")
     parser.add_argument("-c", "--calibrate",
                         help="Calibrate the Wacom pen for the current screen orientation",
                         action="store_true")
@@ -698,6 +716,9 @@ def main():
     elif args.rotatelock:
         log.info("Toggle the rotation lock on/off")
         send_command("togglelock")
+    elif args.toggletouch:
+        log.info("Togge touch screen on/off")
+        send_command("toggletouch")
     elif args.calibrate:
         log.info("Calibrating the Wacom pen")
         cal = Calibration('Wacom ISDv4 EC Pen stylus')

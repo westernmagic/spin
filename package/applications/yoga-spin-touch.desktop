@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Yoga Spin - Toggle Touch Screen
+Exec=spin.py --toggletouch
+Terminal=false
+Type=Application
+Icon=yoga-spin-touch
