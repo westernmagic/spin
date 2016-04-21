@@ -1,4 +1,4 @@
-VERSION = 0.1.0
+VERSION = 0.2.0
 NAME = yoga-spin
 
 BASE_DIR = build
@@ -16,11 +16,13 @@ BIN = spin.py
 ICONS_DIR = $(INSTALL_PATH)/usr/share/icons/hicolor/scalable/apps
 ICONS = \
 yoga-spin-lock.svg \
+yoga-spin-touch.svg \
 yoga-spin-mode.svg
 
 APPS_DIR = $(INSTALL_PATH)/usr/share/applications
 APPS = \
 yoga-spin-lock.desktop \
+yoga-spin-touch.desktop \
 yoga-spin-mode.desktop
 
 all:
