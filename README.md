@@ -97,7 +97,7 @@ spin.py --daemon --loglevel 1
 
 ### broken wacom calibration
 
-The default System Settings>Wacom Tablet>Calibrate... function in Ubuntu 15.10 doesn't work correctly with the ThinkPad Yoga 12. Each time you use it, the calibration just get worse and worse. So don't use it!
+The default System Settings>Wacom Tablet>Calibrate... function in Ubuntu 15.10 and 16.04 doesn't work correctly with the ThinkPad Yoga 12. Each time you use it, the calibration just get worse and worse. So don't use it!
 
 
 If you have already messed up your calibration using the systems Wacom calibrator, you can reset it using:
@@ -169,7 +169,7 @@ Once you're happy with your manual calibration, enter them into your ~/.config/s
 
 This utility has been tested on the following operating systems:
 
-- Ubuntu 15.10
+- Ubuntu 15.10 and 16.04
 
 This utility has been tested on the following computer models:
 
@@ -182,7 +182,7 @@ There is evidence that it does not run with full functionality on the ThinkPad Y
 
 ## about this fork
 
-This is a fork of wdbm/spin. Everything should be working properly with my Thinkpad Yoga 12 2nd Gen machine under Ubuntu 15.10. There are some major changes from the wdbm/spin version, including:
+This is a fork of wdbm/spin. Everything should be working properly with my Thinkpad Yoga 12 2nd Gen machine under Ubuntu 15.10 and 16.04. There are some major changes from the wdbm/spin version, including:
 
 - Removed the GUI.
 - Improved the handling of the accelerometer using vector math, so it detects the correct orientation.
