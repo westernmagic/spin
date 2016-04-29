@@ -179,8 +179,7 @@ class Daemon(QtCore.QObject):
         signal.signal(signal.SIGINT, self.signal_handler)
         # Check if spin is running.
         if os.path.exists(SPIN_SOCKET):
-            log.error("Only one instance of Yoga Spin Daemon can be run at a time")
-            sys.exit()
+            os.remove(SPIN_SOCKET)
         # Audit the inputs available.
         self.device_names = get_inputs()
         log.debug("Device names: {device_names}".format(device_names = self.device_names))
