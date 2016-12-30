@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 """
 ################################################################################
@@ -523,11 +523,16 @@ def get_inputs():
     ).communicate()[0]
     devices_and_keyphrases = {
         "touchscreen": ["SYNAPTICS Synaptics Touch Digitizer V04",
-                        "ELAN Touchscreen"],
+                        "ELAN Touchscreen",
+                        "Wacom Co.,Ltd. Pen and multitouch sensor Finger touch"],
         "touchpad":    ["PS/2 Synaptics TouchPad",
-                        "SynPS/2 Synaptics TouchPad"],
-        "nipple":      ["TPPS/2 IBM TrackPoint"],
-        "stylus":      ["Wacom ISDv4 EC Pen stylus"]
+                        "SynPS/2 Synaptics TouchPad",
+                        "ETPS/2 Elantech Touchpad"],
+        "nipple":      ["TPPS/2 IBM TrackPoint",
+                        "ETPS/2 Elantech TrackPoint"],
+        "stylus":      ["Wacom ISDv4 EC Pen stylus",
+                        "Wacom Co.,Ltd. Pen and multitouch sensor Pen stylus",
+                        "Wacom Co.,Ltd. Pen and multitouch sensor Pen eraser"]
     }
     device_names = {}
     for device, keyphrases in devices_and_keyphrases.iteritems():
