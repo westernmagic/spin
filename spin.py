@@ -80,6 +80,7 @@ class Calibration():
         xrandr = subprocess.Popen(['xrandr', '-q', '--verbose'], stdout=subprocess.PIPE)
         for line in xrandr.stdout:
             if "eDP1" in line:
+                # TODO: if the line split starts with '(', mode is normal (normal mode is not reported by xrandr
                 return( line.split()[5])
         print('Warning! Unable to detect screen orientation.')
         return('normal')
