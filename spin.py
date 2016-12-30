@@ -382,6 +382,15 @@ class Daemon(QtCore.QObject):
         if mode == "togglelock":
             self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
             self.engage_mode('togglelock')
+        elif mode == "display_position_change":
+            # TODO: implement
+            self.engage_mode("toggle")
+            log.info("Display mode changed")
+        elif mode == "tablet_mode_change":
+            self.acpi_queue.get() # Dito
+            # TODO: implement
+            self.engage_mode("toggle")
+            log.info("Tablet mode changed")
         else:
             log.error("Triggered acpi_listen with unknown mode {0}".format(mode))
 
@@ -599,11 +608,15 @@ def acpi_sensor(acpi_queue):
         log.debug("ACPI event: {0}".format(event_ACPI))
         display_position_event = "ibm/hotkey LEN0068:00 00000080 000060c0\n"
         rotation_lock_event = "ibm/hotkey LEN0068:00 00000080 00006020\n"
+        tablet_mode_event = " PNP0C14:04 000000b0 00000000\n"
         if event_ACPI == rotation_lock_event:
             acpi_queue.put("togglelock")
         elif event_ACPI == display_position_event:
             log.info("Display position changed. Event not implemented.")
             acpi_queue.put("display_position_change")
+        elif event_ACPI == tablet_mode_event:
+            log.info("Tablet mode changed.")
+            acpi_queue.put("tablet_mode_change")
         else:
             log.info("Unknown acpi event triggered: {0}".format(event_ACPI))
             acpi_queue.put("unknown")
