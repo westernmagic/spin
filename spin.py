@@ -383,7 +383,7 @@ class Daemon(QtCore.QObject):
             self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
             self.engage_mode('togglelock')
         else:
-            log.error("Triggered acpi_listen with unknwon mode {0}".format(mode))
+            log.error("Triggered acpi_listen with unknown mode {0}".format(mode))
 
 
     def socket_listen(self):
