@@ -473,6 +473,7 @@ class Daemon(QtCore.QObject):
             self.display_orientation(orientation = "normal")
             self.touchscreen_orientation(orientation = "normal")
             self.set_calibration()
+            os.system("which i3-msg && i3-msg layout splith")
             os.system('notify-send "Laptop Mode"')
         elif mode in ["left", "right", "inverted", "normal"]:
             self.display_orientation(orientation = mode)
