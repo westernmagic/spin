@@ -480,6 +480,10 @@ class Daemon(QtCore.QObject):
             self.display_orientation(orientation = mode)
             self.touchscreen_orientation(orientation = mode)
             self.set_calibration()
+            if mode in ["normal", "inverted"]:
+                os.system("which i3-msg && i3-msg layout splith")
+            else: # mode in ["left", "right"]
+                os.system("which i3-msg && i3-msg layout splitv")
         elif mode == "togglelock":
             if self.locked is True:
                 self.locked = False
