@@ -551,6 +551,7 @@ def get_inputs():
                         "Wacom Co.,Ltd. Pen and multitouch sensor Pen eraser"]
     }
     device_names = {}
+    # TODO: allow for multiple devices of each type
     for device, keyphrases in devices_and_keyphrases.iteritems():
         for keyphrase in keyphrases:
             if keyphrase in input_devices:
