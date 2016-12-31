@@ -387,12 +387,10 @@ class Daemon(QtCore.QObject):
             self.acpi_queue.get()  # The rotation lock key triggers acpi twice, ignoring the second one.
             self.engage_mode('togglelock')
         elif mode == "display_position_change":
-            # TODO: implement
             self.engage_mode("toggle")
             log.info("Display mode changed")
         elif mode == "tablet_mode_change":
-            self.acpi_queue.get() # Dito
-            # TODO: implement
+            # Even though the event toggles twice, in the end it works out
             self.engage_mode("toggle")
             log.info("Tablet mode changed")
         else:
